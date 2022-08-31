@@ -24,10 +24,16 @@
 """
 Class for representing an xname.
 """
-import re
 from collections import OrderedDict
-
-from sat.cached_property import cached_property
+from functools import cached_property
+import re
+from typing import (
+    Iterable,
+    Optional,
+    Set,
+    Tuple,
+    Union
+)
 
 
 class XName:
@@ -41,21 +47,21 @@ class XName:
         ('CABINET', re.compile(r'x\d+$'))
     ])
 
-    def __init__(self, xname_str):
+    def __init__(self, xname_str: str) -> None:
         """Creates a new xname object from the given xname string.
 
         Args:
-            xname_str (str): The string representation of the xname.
+            xname_str: The string representation of the xname.
         """
         self.xname_str = xname_str
 
     @cached_property
-    def is_valid(self):
+    def is_valid(self) -> bool:
         """bool: if this xname is valid or not"""
         return bool(self.tokens)
 
     @cached_property
-    def tokens(self):
+    def tokens(self) -> Tuple[Union[str, int], ...]:
         """tuple: The tokenized form of the xname.
 
         Numeric elements are converted to integers which strips leading zeros.
@@ -79,7 +85,7 @@ class XName:
         return tuple(toks)
 
     @classmethod
-    def get_xname_from_tokens(cls, tokens):
+    def get_xname_from_tokens(cls, tokens: Iterable[Union[str, int]]) -> 'XName':
         """Gets an XName instance from the given tokens.
 
         Note that creating a new XName from its tokens can result in an XName
@@ -96,12 +102,12 @@ class XName:
         -> True
 
         Args:
-            tokens (Iterable): An iterable of tokens for the xname.
+            tokens: An iterable of tokens for the xname.
         """
         xname_str = ''.join(str(t) for t in tokens)
         return cls(xname_str)
 
-    def get_type(self):
+    def get_type(self) -> str:
         """Get the type of the xname using the str representation and regular expression.
 
         Returns:
@@ -113,16 +119,19 @@ class XName:
 
         return 'UNKNOWN'
 
-    def get_ancestor(self, levels):
+    def get_ancestor(self, levels: int) -> 'XName':
         """Get the ancestor of this xname by stripping off levels.
 
         Args:
-            levels (int): the number of levels to strip off this xname to get
+            levels: the number of levels to strip off this xname to get
                 the ancestor. Specifying 1 is equivalent to get_direct_parent.
 
         Returns:
             An XName object that is the ancestor the given number of levels up
             the hierarchy.
+
+        Raises:
+            ValueError: if requesting an ancestor beyond the root level
         """
         reverse_index = 2 * levels
         if reverse_index >= len(self.tokens):
@@ -131,7 +140,7 @@ class XName:
 
         return XName.get_xname_from_tokens(self.tokens[:-reverse_index])
 
-    def get_direct_parent(self):
+    def get_direct_parent(self) -> 'XName':
         """Get the direct parent of this xname.
 
         E.g., the direct parent of the xname 'x3000c0s0b0n0p0' would be
@@ -142,7 +151,7 @@ class XName:
         """
         return self.get_ancestor(1)
 
-    def get_parent_node(self):
+    def get_parent_node(self) -> Optional['XName']:
         """Get the xname of the parent node of this xname, if possible.
 
         Returns:
@@ -155,7 +164,7 @@ class XName:
 
         return None
 
-    def get_cabinet(self):
+    def get_cabinet(self) -> 'XName':
         """Get the cabinet of this xname.
 
         Returns:
@@ -163,7 +172,7 @@ class XName:
         """
         return XName.get_xname_from_tokens(self.tokens[:2])
 
-    def get_chassis(self):
+    def get_chassis(self) -> 'XName':
         """Get the chassis of this xname.
 
         Returns:
@@ -171,11 +180,11 @@ class XName:
         """
         return XName.get_xname_from_tokens(self.tokens[:4])
 
-    def relative_node_positions_match(self, other):
+    def relative_node_positions_match(self, other: 'XName') -> bool:
         """Check that two node xnames are in the same relative position on a blade.
 
         Args:
-            other (XName): another node xname
+            other: another node xname
 
         Returns:
             bool: whether or not this xname and the other share the same
@@ -188,32 +197,33 @@ class XName:
         # the last 4 tokens, those being the NodeBMC number and Node number.
         return self.tokens[-4:] == other.tokens[-4:]
 
-    def __lt__(self, other):
+    def __lt__(self, other: 'XName') -> bool:
         return self.tokens < other.tokens
 
-    def __le__(self, other):
+    def __le__(self, other: 'XName') -> bool:
         return self.tokens <= other.tokens
 
-    def __eq__(self, other):
-        return (isinstance(self, type(other)) and
-                self.tokens == other.tokens)
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, type(self)):
+            return NotImplemented
+        return self.tokens == other.tokens
 
-    def __gt__(self, other):
+    def __gt__(self, other: 'XName') -> bool:
         return self.tokens > other.tokens
 
-    def __ge__(self, other):
+    def __ge__(self, other: 'XName') -> bool:
         return self.tokens >= other.tokens
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(self.tokens)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.xname_str
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.xname_str
 
-    def contains_component(self, other):
+    def contains_component(self, other: 'XName') -> bool:
         """Returns whether this component contains another.
 
         Tests whether the component represented by this xname contains the
@@ -240,7 +250,11 @@ class XName:
         return True
 
 
-def get_matches(filters, elems):
+# Type alias for returning a 4-tuple of XName sets (used below in get_matches)
+Matches = Tuple[Set['XName'], Set['XName'], Set['XName'], Set['XName']]
+
+
+def get_matches(filters: Iterable['XName'], elems: Iterable['XName']) -> Matches:
     """Separate a list into matching and unmatched members.
 
     Args:

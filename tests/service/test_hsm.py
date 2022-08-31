@@ -1,7 +1,7 @@
 #
 # MIT License
 #
-# (C) Copyright 2019-2021 Hewlett Packard Enterprise Development LP
+# (C) Copyright 2019-2022 Hewlett Packard Enterprise Development LP
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -22,14 +22,16 @@
 # OTHER DEALINGS IN THE SOFTWARE.
 #
 """
-Unit tests for sat.apiclient.hsm
+Unit tests for csm_api_client.service.hsm
 """
 
 import logging
 import unittest
 from unittest import mock
 
-from sat.apiclient import APIError, APIGatewayClient, HSMClient
+from csm_api_client.session import Session
+from csm_api_client.service.gateway import APIError, APIGatewayClient
+from csm_api_client.service.hsm import HSMClient
 from tests.common import ExtendedTestCase
 
 
@@ -49,7 +51,8 @@ class TestHSMClient(unittest.TestCase):
             'Components': self.components
         }
 
-        self.hsm_client = HSMClient()
+        self.mock_session = mock.MagicMock(autospec=Session)
+        self.hsm_client = HSMClient(self.mock_session)
 
     def tearDown(self):
         mock.patch.stopall()
@@ -157,8 +160,8 @@ class TestHSMClientRedfishEndpoints(ExtendedTestCase):
                 }
             ]
         }
-        mock.patch('sat.apiclient.gateway.get_config_value').start()
-        self.hsm_client = HSMClient()
+        self.mock_session = mock.MagicMock(autospec=Session)
+        self.hsm_client = HSMClient(self.mock_session)
 
     def tearDown(self):
         """Stop patches."""
@@ -204,7 +207,7 @@ class TestHSMClientRedfishEndpoints(ExtendedTestCase):
             ]
         }
 
-        def _fake_get(*args, params):
+        def _fake_get(*_, params):
             if params.get('type') == 'ChassisBMC':
                 return chassis_response
             return router_response

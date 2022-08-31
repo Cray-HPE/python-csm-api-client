@@ -25,27 +25,41 @@
 Client for querying the Hardware State Manager (HSM) API
 """
 import logging
+from typing import (
+    Dict,
+    Iterable,
+    Optional,
+    Set,
+    Tuple,
+)
 
-from sat.apiclient.gateway import (
+from csm_api_client.service.gateway import (
     APIError,
     APIGatewayClient,
     handle_api_errors,
 )
-from sat.constants import BMC_TYPES
-from sat.xname import XName
+from csm_api_client.xname import XName
 
+
+BMC_TYPES = ('NodeBMC', 'RouterBMC', 'ChassisBMC')
 LOGGER = logging.getLogger(__name__)
+
+Components = Iterable[Dict[str, str]]
 
 
 class HSMClient(APIGatewayClient):
     base_resource_path = 'smd/hsm/v2/'
 
-    def get_bmcs_by_type(self, bmc_type=None, check_keys=True):
+    def get_bmcs_by_type(
+        self,
+        bmc_type: Optional[str] = None,
+        check_keys: bool = True
+    ) -> Iterable[Dict]:
         """Get a list of BMCs, optionally of a single type.
 
         Args:
-            bmc_type (string): Any HSM BMC type: NodeBMC, RouterBMC or ChassisBMC.
-            check_keys (bool): Whether or not to filter data based on missing keys.
+            bmc_type: Any HSM BMC type: NodeBMC, RouterBMC or ChassisBMC.
+            check_keys: Whether or not to filter data based on missing keys.
 
         Returns:
             A list of dictionaries where each dictionary describes a BMC.
@@ -86,15 +100,20 @@ class HSMClient(APIGatewayClient):
             if endpoint.get('ID') not in invalid_redfish_endpoint_xnames
         ]
 
-    def get_and_filter_bmcs(self, bmc_types=BMC_TYPES, include_disabled=False, include_failed_discovery=False,
-                            xnames=None):
+    def get_and_filter_bmcs(
+        self,
+        bmc_types: Tuple[str, ...] = BMC_TYPES,
+        include_disabled: bool = False,
+        include_failed_discovery: bool = False,
+        xnames: Optional[Iterable[str]] = None
+    ) -> Set[str]:
         """Get all BMCs of a given type, optionally filtering against a list of xnames.
 
         Args:
-            bmc_types (tuple): Any combination of ('NodeBMC', 'RouterBMC', 'ChassisBMC')
-            include_disabled (bool): if True, include disabled nodes.
-            include_failed_discovery (bool): if True, include nodes which had discovery errors.
-            xnames (list): A list of xnames to filter against the data from HSM.
+            bmc_types: Any combination of ('NodeBMC', 'RouterBMC', 'ChassisBMC')
+            include_disabled: if True, include disabled nodes.
+            include_failed_discovery: if True, include nodes which had discovery errors.
+            xnames: A list of xnames to filter against the data from HSM.
 
         Returns:
             A set of xnames.
@@ -148,23 +167,23 @@ class HSMClient(APIGatewayClient):
 
         return xnames
 
-    def get_component_xnames(self, params=None, omit_empty=True):
+    def get_component_xnames(self, params: Optional[Dict[str, str]] = None, omit_empty: bool = True) -> Iterable[str]:
         """Get the xnames of components matching the given criteria.
 
         If any args are omitted, the results are not limited by that criteria.
 
         Args:
-            params (dict): the parameters to pass in the GET request to the
+            params: the parameters to pass in the GET request to the
                 '/State/Components' URL in HSM. E.g.:
                     {
                         'type': 'Node',
                         'role': 'Compute',
                         'class': 'Mountain'
                     }
-            omit_empty (bool): if True, omit the components with "State": "Empty"
+            omit_empty: if True, omit the components with "State": "Empty"
 
         Returns:
-            list of str: the xnames matching the given filters
+            the xnames matching the given filters
 
         Raises:
             APIError: if there is a failure querying the HSM API or getting
@@ -196,11 +215,11 @@ class HSMClient(APIGatewayClient):
             raise APIError(f'{err_prefix} due to missing {err} key in list of components.')
 
     @handle_api_errors
-    def query_components(self, component=None, **kwargs):
+    def query_components(self, component: Optional[str] = None, **kwargs: str) -> Iterable[Dict[str, str]]:
         """Query the HSM database to retrieve components matching given parameters.
 
         Args:
-            component (str or None): if a str, then query HSM for that
+            component: if a str, then query HSM for that
                 component. If None, retrieve all components matching the parameters.
             kwargs: keyword arguments should correspond to parameters accepted
                 by the /State/Components/Query HSM API.
@@ -213,22 +232,22 @@ class HSMClient(APIGatewayClient):
         """
         # TODO: Consolidate query_components() and get_node_components().
         if component:
-            component = XName(component)
-            if not component.is_valid:
+            component_xname = XName(component)
+            if not component_xname.is_valid:
                 raise APIError(f'Could not query component {component}: invalid xname')
 
-            components = self.get('State', 'Components', 'Query', str(component), params=kwargs).json()
+            components = self.get('State', 'Components', 'Query', str(component_xname), params=kwargs).json()
 
         else:
             components = self.get('State', 'Components', params=kwargs).json()
 
         return components['Components']
 
-    def get_node_components(self, ancestor=None):
+    def get_node_components(self, ancestor: Optional[str] = None) -> Components:
         """Get the components of Type=Node from HSM.
 
         Args:
-            ancestor (str): a component xname, which, if specified, is the
+            ancestor: a component xname, which, if specified, is the
                 ancestor of all node components returned by this function
 
         Returns:
@@ -243,11 +262,12 @@ class HSMClient(APIGatewayClient):
         err_prefix = 'Failed to get Node components'
         try:
             if ancestor:
-                ancestor = XName(ancestor)
-                if not ancestor.is_valid:
+                ancestor_xname = XName(ancestor)
+                if not ancestor_xname.is_valid:
                     raise APIError(f'Could not get descendants of {ancestor}: invalid xname')
 
-                components = self.get('State', 'Components', 'Query', str(ancestor), params={'type': 'Node'}).json()
+                components = self.get('State', 'Components', 'Query', str(ancestor_xname),
+                                      params={'type': 'Node'}).json()
             else:
                 components = self.get('State', 'Components', params={'type': 'Node'}).json()
 
@@ -261,11 +281,11 @@ class HSMClient(APIGatewayClient):
 
         return components
 
-    def get_all_components(self):
+    def get_all_components(self) -> Components:
         """Get all components from HSM.
 
         Returns:
-            components ([dict]): A list of dictionaries from HSM.
+            components: A list of dictionaries from HSM.
 
         Raises:
             APIError: if there is a failure querying the HSM API or getting
@@ -284,15 +304,15 @@ class HSMClient(APIGatewayClient):
 
         return components
 
-    def get_component_history_by_id(self, cid=None, by_fru=False):
+    def get_component_history_by_id(self, cid: Optional[str] = None, by_fru: bool = False) -> Components:
         """Get component history from HSM, optionally for a single ID or FRUID.
 
         Args:
-            cid (str or None): A component ID which is either an xname or FRUID or None.
-            by_fru (bool): if True, query HSM history using HardwareByFRU.
+            cid: A component ID which is either an xname or FRUID or None.
+            by_fru: if True, query HSM history using HardwareByFRU.
 
         Returns:
-            components ([dict]): A list of dictionaries from HSM with component history or None.
+            A list of dictionaries from HSM with component history or None.
 
         Raises:
             APIError: if there is a failure querying the HSM API or getting
@@ -320,15 +340,15 @@ class HSMClient(APIGatewayClient):
 
         return components
 
-    def get_component_history(self, cids=None, by_fru=False):
+    def get_component_history(self, cids: Optional[Set[str]] = None, by_fru: bool = False) -> Components:
         """Get component history from HSM.
 
         Args:
-            cids (set(str)): A set of component IDs which are either an xname or FRUID or None.
-            by_fru (bool): if True, query HSM history using HardwareByFRU.
+            cids: A set of component IDs which are either an xname or FRUID or None.
+            by_fru: if True, query HSM history using HardwareByFRU.
 
         Returns:
-            components ([dict]): A list of dictionaries from HSM with component history.
+            A list of dictionaries from HSM with component history.
 
         Raises:
             APIError: if there is a failure querying the HSM API or getting
@@ -357,12 +377,12 @@ class HSMClient(APIGatewayClient):
         return components
 
     @handle_api_errors
-    def set_component_enabled(self, xname, *, enabled):
+    def set_component_enabled(self, xname: str, *, enabled: bool) -> None:
         """Enable or disable a component in HSM inventory
 
         Args:
-            xname (str): the xname of the component to modify
-            enabled (bool): if True, enable the component. If False, disable
+            xname: the xname of the component to modify
+            enabled: if True, enable the component. If False, disable
                 the component.
         """
         self.patch(
@@ -373,12 +393,12 @@ class HSMClient(APIGatewayClient):
         )
 
     @handle_api_errors
-    def set_redfish_endpoint_enabled(self, xname, *, enabled):
+    def set_redfish_endpoint_enabled(self, xname: str, *, enabled: bool) -> None:
         """Enable or disable a Redfish endpoint in HSM inventory
 
         Args:
-            xname (str): the xname of the component to modify
-            enabled (bool): if True, enable the Redfish endpoint. If False,
+            xname: the xname of the component to modify
+            enabled: if True, enable the Redfish endpoint. If False,
                 disable the Redfish endpoint.
         """
         self.patch(
@@ -389,11 +409,11 @@ class HSMClient(APIGatewayClient):
         )
 
     @handle_api_errors
-    def get_ethernet_interfaces(self, xname=None):
+    def get_ethernet_interfaces(self, xname: Optional[str] = None) -> Components:
         """Get ethernet interfaces for some component
 
         Args:
-            xname (str): the xname of the component for which to search for ethernet interfaces
+            xname: the xname of the component for which to search for ethernet interfaces
 
         Returns:
             list of dict: interfaces retrieved from HSM for the given xname, or
@@ -405,18 +425,18 @@ class HSMClient(APIGatewayClient):
         all_interfaces = self.get('Inventory', 'EthernetInterfaces').json()
         if not xname:
             return all_interfaces
-        xname = XName(xname)
+        component_xname = XName(xname)
         return [
             interface for interface in all_interfaces
-            if xname.contains_component(XName(interface['ComponentID']))
+            if component_xname.contains_component(XName(interface['ComponentID']))
         ]
 
     @handle_api_errors
-    def delete_ethernet_interface(self, interface_id):
+    def delete_ethernet_interface(self, interface_id: str) -> None:
         """Delete an ethernet interface from HSM
 
         Args:
-            interface_id (str): the ID of the ethernet interface to delete
+            interface_id: the ID of the ethernet interface to delete
 
         Raises:
             APIError: if there is an issue deleting the ethernet interface from HSM
@@ -424,11 +444,11 @@ class HSMClient(APIGatewayClient):
         self.delete('Inventory', 'EthernetInterfaces', interface_id)
 
     @handle_api_errors
-    def delete_redfish_endpoint(self, redfish_endpoint):
+    def delete_redfish_endpoint(self, redfish_endpoint: str) -> None:
         """Delete a Redfish endpoint from HSM
 
         Args:
-            redfish_endpoint (str): the xname of the Redfish endpoint to delete
+            redfish_endpoint: the xname of the Redfish endpoint to delete
 
         Raises:
             APIError: if there is an issue deleting the Redfish endpoint from HSM
@@ -436,12 +456,12 @@ class HSMClient(APIGatewayClient):
         self.delete('Inventory', 'RedfishEndpoints', redfish_endpoint)
 
     @handle_api_errors
-    def begin_discovery(self, xnames, force=False):
+    def begin_discovery(self, xnames: Iterable[str], force: bool = False) -> None:
         """Kick off discovery of the given xname.
 
         Args:
-            xnames (Iterable[str]): the xnames to discover
-            force (bool): if True, force discovery.
+            xnames: the xnames to discover
+            force: if True, force discovery.
 
         Raises:
             APIError: if there is a problem discovering the given xnames
@@ -449,11 +469,11 @@ class HSMClient(APIGatewayClient):
         self.post('Inventory', 'Discover', json={'xnames': list(xnames), 'force': force})
 
     @handle_api_errors
-    def get_redfish_endpoint_inventory(self, xname):
+    def get_redfish_endpoint_inventory(self, xname: str) -> Components:
         """Get the Redfish endpoint inventory for some component.
 
         Args:
-            xname (str): the xname to retrieve Redfish endpoints for
+            xname: the xname to retrieve Redfish endpoints for
 
         Raises:
             APIError: if there is a problem retrieving the Redfish endpoint inventory
@@ -461,11 +481,11 @@ class HSMClient(APIGatewayClient):
         return self.get('Inventory', 'RedfishEndpoints', xname).json()
 
     @handle_api_errors
-    def bulk_enable_components(self, components):
+    def bulk_enable_components(self, components: Iterable[str]) -> None:
         """Bulk enable a set of components.
 
         Args:
-            components (Iterable[str]): xnames of components which should be bulk-enabled.
+            components: xnames of components which should be bulk-enabled.
 
         Raises:
             APIError: if there is a problem bulk-enabling the components.
@@ -476,15 +496,15 @@ class HSMClient(APIGatewayClient):
         })
 
     @handle_api_errors
-    def create_ethernet_interface(self, interface):
+    def create_ethernet_interface(self, interface: Dict[str, str]) -> None:
         """Create an ethernet interface in HSM.
 
         Args:
-            interface (dict): a dictionary with the following keys:
-                Description (str): the description of the interface
-                MACAddress (str): the MAC address of the interface
-                IPAddress (str): the IP address of the interface
-                ComponentID (str): the xname of the associated component
+            interface: a dictionary with the following keys:
+                Description: the description of the interface
+                MACAddress: the MAC address of the interface
+                IPAddress: the IP address of the interface
+                ComponentID: the xname of the associated component
 
         Raises:
             APIError: if the interface cannot be created
