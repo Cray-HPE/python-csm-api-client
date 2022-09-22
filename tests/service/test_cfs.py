@@ -569,8 +569,7 @@ class TestCFSConfiguration(unittest.TestCase):
             updated_config = self.single_layer_config.save_to_cfs()
 
         self.mock_cfs_client.put.assert_called_once_with(
-            'v2', 'configurations', config_name,
-            json={'layers': layers}
+            'configurations', config_name, json={'layers': layers}
         )
         mock_cfs_config_cls.assert_called_once_with(
             self.mock_cfs_client, self.mock_cfs_client.put.return_value.json.return_value)
@@ -585,8 +584,7 @@ class TestCFSConfiguration(unittest.TestCase):
             updated_config = self.single_layer_config.save_to_cfs(new_name)
 
         self.mock_cfs_client.put.assert_called_once_with(
-            'v2', 'configurations', new_name,
-            json={'layers': layers}
+            'configurations', new_name, json={'layers': layers}
         )
         mock_cfs_config_cls.assert_called_once_with(
             self.mock_cfs_client, self.mock_cfs_client.put.return_value.json.return_value)

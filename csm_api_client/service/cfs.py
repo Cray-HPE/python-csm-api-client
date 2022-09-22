@@ -414,7 +414,7 @@ class CFSConfiguration:
         # configuration
         if not overwrite:
             try:
-                response = self._cfs_client.get('v2', 'configurations', cfs_name, raise_not_ok=False)
+                response = self._cfs_client.get('configurations', cfs_name, raise_not_ok=False)
 
                 # If response was OK, that indicates there's already a CFS configuration
                 if response.ok:
@@ -429,7 +429,7 @@ class CFSConfiguration:
                 raise CFSConfigurationError(f'Failed to retrieve CFS configuration "{cfs_name}": {err}')
 
         try:
-            response_json = self._cfs_client.put('v2', 'configurations', cfs_name,
+            response_json = self._cfs_client.put('configurations', cfs_name,
                                                  json=self.req_payload).json()
         except APIError as err:
             raise CFSConfigurationError(f'Failed to update CFS configuration "{cfs_name}": {err}')

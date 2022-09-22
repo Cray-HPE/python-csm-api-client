@@ -1,15 +1,15 @@
 # Introduction
 
-The `python-csm-api-client` package is a Python client library for accessing
+The `csm-api-client` package is a Python client library for accessing
 Cray System Management APIs.
 
 ## Installation as a dependency
 
-`python-csm-api-client` can be installed as a dependency in your Python project:
+`csm-api-client` can be installed as a dependency in your Python project:
 
 ```
 export PIP_EXTRA_INDEX_URL="https://artifactory.algol60.net/artifactory/csm-python-modules/simple"
-pip install python-csm-api-client
+pip install csm-api-client
 ```
 
 ## Local installation with Poetry
@@ -20,7 +20,8 @@ website](https://python-poetry.org/).
 
 On macOS, using the system-provided Python installation can cause problems when
 installing `poetry`. To avoid them, it is recommended to use a third-party
-Python distribution instead. There a couple options for installing Python.
+Python distribution instead. There are a few options for installing a
+third-party Python distribution.
 
 * Use a package manager such as Homebrew, Macports, or Nix to install a
   third-party Python distribution. For instance, `brew install python` can be
@@ -34,7 +35,7 @@ installation
 instructions](https://python-poetry.org/docs/#installing-with-the-official-installer)
 to install `poetry`.
 
-To install the `csm-api-client` in a local virtualenv for development:
+To install `csm-api-client` in a local virtualenv for development:
 
 ```
 $ poetry install
@@ -53,11 +54,6 @@ The `csm-api-client` library may also be installed with pip:
 ```
 $ pip install python-csm-api-client/
 ```
-
-# Contributing
-
-See [instructions in CONTRIBUTING.md](CONTRIBUTING.md).
-
 
 # Copying
 
