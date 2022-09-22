@@ -29,16 +29,21 @@ Client for interacting with the Version Control Service (VCS).
 # and should be refactored into a common library.
 import base64
 from contextlib import contextmanager
+from functools import cached_property
 import logging
 import os
 import subprocess
 from tempfile import NamedTemporaryFile
+from typing import (
+    Dict,
+    Generator,
+    Optional,
+    List,
+)
 from urllib.parse import urlparse, urlunparse
 
 from kubernetes.config import load_kube_config
 from kubernetes.client import CoreV1Api
-
-from sat.cached_property import cached_property
 
 
 LOGGER = logging.getLogger(__name__)
@@ -49,11 +54,11 @@ class VCSError(Exception):
 
 
 @contextmanager
-def vcs_creds_helper():
+def vcs_creds_helper() -> Generator[Dict[str, str], None, None]:
     """Context manager to set up a helper script to get VCS credentials.
 
     Yields:
-        dict: A dictionary containing current process environment with GIT_ASKPASS
+        A dictionary containing current process environment with GIT_ASKPASS
             set to the path to the script for obtaining VCS credentials.
     """
     # Get the password directly from k8s to avoid leaking it via the /proc filesystem
@@ -74,11 +79,11 @@ def vcs_creds_helper():
 class VCSRepo:
     """Main client object for accessing a VCS repository."""
 
-    def __init__(self, clone_url):
+    def __init__(self, clone_url: str) -> None:
         """Constructor for VCSRepo.
 
         Args:
-            clone_url (str): The clone URL of the git repo.
+            clone_url: The clone URL of the git repo.
         """
         parsed_url = urlparse(clone_url)
         if '@' in parsed_url.netloc:
@@ -89,19 +94,19 @@ class VCSRepo:
         self.clone_url = clone_url
 
     @cached_property
-    def repo_path(self):
-        """str: the path component of the clone_url"""
+    def repo_path(self) -> str:
+        """The path component of the clone_url"""
         parsed_url = urlparse(self.clone_url)
         return parsed_url.path
 
     @cached_property
-    def repo_name(self):
-        """str: the name of the repo"""
+    def repo_name(self) -> str:
+        """The name of the repo"""
         return os.path.basename(os.path.splitext(self.repo_path)[0])
 
     @cached_property
-    def vcs_username(self):
-        """str: the VCS username from a Kubernetes secret
+    def vcs_username(self) -> str:
+        """The VCS username from a Kubernetes secret
 
         Raises:
             VCSError: if unable to read the vcs_username from the K8s secret.
@@ -116,21 +121,21 @@ class VCSRepo:
         return base64.b64decode(username).decode('utf-8').strip()
 
     @property
-    def user_clone_url(self):
-        """str: the clone url including the username"""
+    def user_clone_url(self) -> str:
+        """The clone url including the username"""
         parsed_url = urlparse(self.clone_url)
         user_netloc = f'{self.vcs_username}@{parsed_url.netloc}'
         return urlunparse(parsed_url._replace(netloc=user_netloc))
 
     @staticmethod
-    def run_authenticated_git_cmd(git_cmd):
+    def run_authenticated_git_cmd(git_cmd: List[str]) -> subprocess.CompletedProcess:
         """Run the given git command, authenticated using credentials from the K8s secret.
 
         Args:
-            git_cmd (list of str): the git command to run
+            git_cmd: the git command to run
 
         Returns:
-            subprocess.CompletedProcess: the completed process
+            The completed process
 
         Raises:
             subprocess.CalledProcessError: if the command fails
@@ -140,11 +145,11 @@ class VCSRepo:
                                   env=env, check=True)
 
     @property
-    def remote_refs(self):
+    def remote_refs(self) -> Dict[str, str]:
         """Get the remote refs for a remote repo.
 
         Returns:
-            dict: mapping of remote refs to their corresponding commit hashes
+            Mapping of remote refs to their corresponding commit hashes
 
         Raises:
             VCSError: if there is an error when git accesses VCS to enumerate
@@ -157,39 +162,44 @@ class VCSRepo:
 
         # Each line in the output from `git ls-remote` has the form
         # "<commit_hash>\t<ref_name>", and we want the returned dictionary to map
-        # the other way, i.e. from ref names to commit hashes. Thus when we split
-        # each line on '\t', we should reverse the order of the resulting pair
-        # before inserting it into the dictionary (hence the `reversed` in the
-        # following comprehension.)
-        return dict(
-            tuple(reversed(line.split('\t')))
-            for line in proc.stdout.decode('utf-8').split('\n')
-            if line
-        )
+        # the other way, i.e. from ref names to commit hashes.
+        remote_refs = {}
+        for line in proc.stdout.decode('utf-8').split('\n'):
+            if not line:
+                continue
+            commit_hash, ref_name = line.split('\t')
+            remote_refs[ref_name] = commit_hash
+        return remote_refs
 
-    def get_commit_hash_for_branch(self, branch):
+    def get_commit_hash_for_branch(self, branch: str) -> Optional[str]:
         """Get the commit hash corresponding to the HEAD of some branch.
 
         Args:
-            branch (str): the name of the branch
+            branch: the name of the branch
 
         Returns:
-            str or None: a commit hash corresponding to the given branch,
-                or None if the given branch is not found.
+            A commit hash corresponding to the given branch, or None if the
+            given branch is not found.
         """
         target_ref = f'refs/heads/{branch}'
         return self.remote_refs.get(target_ref)
 
-    def clone(self, branch=None, directory=None, single_branch=False, depth=None):
+    def clone(
+        self,
+        branch: Optional[str] = None,
+        directory: Optional[str] = None,
+        single_branch: bool = False,
+        depth: Optional[int] = None
+    ) -> None:
         """Clone the VCS repo to the given path.
 
         Args:
-            branch (str, optional): the branch to set as HEAD in the cloned repo.
+            branch: the branch to set as HEAD in the cloned repo.
                 If omitted, defaults to the HEAD of the remote repo.
-            directory (str, optional): the directory to clone the repo to.
+            directory: the directory to clone the repo to.
                 If omitted, clone to a directory matching the name of the repo.
-            single_branch (bool, optional): whether to clone just a single branch.
-            depth (int, optional): create a shallow clone with history truncated
+            single_br: whether to clone just a single branch.
+            depth: create a shallow clone with history truncated
                  to this number of commits.
         """
         git_cmd = ['git', 'clone']

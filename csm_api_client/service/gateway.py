@@ -27,14 +27,23 @@ Client for querying the API gateway.
 from functools import wraps
 import logging
 import requests
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Optional,
+)
 from urllib.parse import urlunparse
 
-from sat.config import get_config_value
+from requests.models import Response
+
+from csm_api_client.session import Session
+
 
 LOGGER = logging.getLogger(__name__)
 
 
-def handle_api_errors(fn):
+def handle_api_errors(fn: Callable) -> Callable:
     """Decorator to handle common errors with API access.
 
     This decorator handles APIErrors, ValueErrors, and KeyErrors, raising all
@@ -44,7 +53,7 @@ def handle_api_errors(fn):
     err_prefix = f'Failed to {fn.__name__.replace("_", " ")}'
 
     @wraps(fn)
-    def inner(*args, **kwargs):
+    def inner(*args: Any, **kwargs: Any) -> Any:
         try:
             return fn(*args, **kwargs)
         except APIError as err:
@@ -72,86 +81,94 @@ class APIGatewayClient:
     # This can be set in subclasses to make a client for a specific API
     base_resource_path = ''
 
-    def __init__(self, session=None, host=None, cert_verify=None, timeout=None):
+    def __init__(self, session: Session, timeout: Optional[int] = None):
         """Initialize the APIGatewayClient.
 
         Args:
             session: The Session instance to use when making REST calls,
                 or None to make connections without a session.
-            host (str): The API gateway host.
-            cert_verify (bool): Whether to verify the gateway's certificate.
-            timeout (int): number of seconds to wait for a response before timing
-                out requests made to services behind the API gateway.
+            timeout: timeout to use for requests
         """
-
-        # Inherit parameters from session if not passed as arguments
-        # If there is no session, get the values from configuration
-
-        if host is None:
-            if session is None:
-                host = get_config_value('api_gateway.host')
-            else:
-                host = session.host
-
-        if cert_verify is None:
-            if session is None:
-                cert_verify = get_config_value('api_gateway.cert_verify')
-            else:
-                cert_verify = session.cert_verify
-
         self.session = session
-        self.host = host
-        self.cert_verify = cert_verify
-        self.timeout = get_config_value('api_gateway.api_timeout') if timeout is None else timeout
-
-    def set_timeout(self, timeout):
         self.timeout = timeout
 
-    def _make_req(self, *args, req_type='GET', req_param=None, json=None):
+    def set_timeout(self, timeout: int) -> None:
+        self.timeout = timeout
+
+    @staticmethod
+    def raise_from_response(response: Response) -> None:
+        """Raise an APIError based on the response body
+
+        Args:
+            response: the Response object from a request
+
+        Raises:
+            APIError: containing an error message with details from the request
+        """
+        api_err_msg = (f"{response.request.method} request to URL "
+                       f"'{response.request.url}' failed with status "
+                       f"code {response.status_code}: {response.reason}")
+        # Attempt to get more information from response
+        try:
+            problem = response.json()
+        except ValueError:
+            raise APIError(api_err_msg)
+
+        if 'title' in problem:
+            api_err_msg += f'. {problem["title"]}'
+        if 'detail' in problem:
+            api_err_msg += f' Detail: {problem["detail"]}'
+
+        raise APIError(api_err_msg)
+
+    def _make_req(
+        self,
+        *args: str,
+        req_type: str = 'GET',
+        req_param: Optional[Dict] = None,
+        json: Dict = None,
+        raise_not_ok: bool = True,
+    ) -> Response:
         """Perform HTTP request with type `req_type` to resource given in `args`.
         Args:
             *args: Variable length list of path components used to construct
                 the path to the resource.
-            req_type (str): Type of reqest (GET, STREAM, POST, PUT, or DELETE).
+            req_type: Type of reqest (GET, STREAM, POST, PUT, or DELETE).
             req_param: Parameter(s) depending on request type.
-            json (dict): The data dict to encode as JSON and pass as the body of
+            json: The data dict to encode as JSON and pass as the body of
                 a POST request.
+            raise_not_ok: If True and the response code is >=400, raise
+                an APIError. If False, return the response object.
 
         Returns:
             The requests.models.Response object if the request was successful.
 
         Raises:
             ReadTimeout: if the req_type is STREAM and there is a ReadTimeout.
-            APIError: if the status code of the response is >= 400 or request
-                raises a RequestException of any kind.
+            APIError: if the status code of the response is >= 400 and
+                raise_not_ok is True, or request raises a RequestException of any
+                kind.
         """
-        url = urlunparse(('https', self.host, 'apis/{}{}'.format(
+        url = urlunparse(('https', self.session.host, 'apis/{}{}'.format(
             self.base_resource_path, '/'.join(args)), '', '', ''))
 
         LOGGER.debug("Issuing %s request to URL '%s'", req_type, url)
 
-        if self.session is None:
-            requester = requests
-        else:
-            requester = self.session.session
+        requester = self.session.session
 
         try:
             if req_type == 'GET':
-                r = requester.get(url, params=req_param, verify=self.cert_verify, timeout=self.timeout)
+                r = requester.get(url, params=req_param, timeout=self.timeout)
             elif req_type == 'STREAM':
-                r = requester.get(url, params=req_param, stream=True,
-                                  verify=self.cert_verify, timeout=self.timeout)
+                r = requester.get(url, params=req_param, stream=True, timeout=self.timeout)
             elif req_type == 'POST':
-                r = requester.post(url, data=req_param, verify=self.cert_verify,
-                                   json=json, timeout=self.timeout)
+                r = requester.post(url, data=req_param, json=json, timeout=self.timeout)
             elif req_type == 'PUT':
-                r = requester.put(url, data=req_param, verify=self.cert_verify,
-                                  json=json, timeout=self.timeout)
+                r = requester.put(url, data=req_param, json=json, timeout=self.timeout)
             elif req_type == 'PATCH':
-                r = requester.patch(url, data=req_param, verify=self.cert_verify,
-                                    json=json, timeout=self.timeout)
+                r = requester.patch(url, data=req_param, timeout=self.timeout)
             elif req_type == 'DELETE':
-                r = requester.delete(url, verify=self.cert_verify, timeout=self.timeout)
+                r = requester.delete(url, timeout=self.timeout)
             else:
                 # Internal error not expected to occur.
                 raise ValueError("Request type '{}' is invalid.".format(req_type))
@@ -166,31 +183,18 @@ class APIGatewayClient:
         LOGGER.debug("Received response to %s request to URL '%s' "
                      "with status code: '%s': %s", req_type, r.url, r.status_code, r.reason)
 
-        if not r.ok:
-            api_err_msg = (f"{req_type} request to URL '{url}' failed with status "
-                           f"code {r.status_code}: {r.reason}")
-            # Attempt to get more information from response
-            try:
-                problem = r.json()
-            except ValueError:
-                raise APIError(api_err_msg)
-
-            if 'title' in problem:
-                api_err_msg += f'. {problem["title"]}'
-            if 'detail' in problem:
-                api_err_msg += f' Detail: {problem["detail"]}'
-
-            raise APIError(api_err_msg)
+        if raise_not_ok and not r.ok:
+            self.raise_from_response(r)
 
         return r
 
-    def get(self, *args, params=None):
+    def get(self, *args: str, params: Optional[Dict] = None, **kwargs: Any) -> Response:
         """Issue an HTTP GET request to resource given in `args`.
 
         Args:
             *args: Variable length list of path components used to construct
                 the path to the resource to GET.
-            params (dict): Parameters dictionary to pass through to request.get.
+            params: Parameters dictionary to pass through to request.get.
 
         Returns:
             The requests.models.Response object if the request was successful.
@@ -200,17 +204,17 @@ class APIGatewayClient:
                 raises a RequestException of any kind.
         """
 
-        r = self._make_req(*args, req_type='GET', req_param=params)
+        r = self._make_req(*args, req_type='GET', req_param=params, **kwargs)
 
         return r
 
-    def stream(self, *args, params=None):
+    def stream(self, *args: str, params: Optional[Dict] = None, **kwargs: Any) -> Response:
         """Issue an HTTP GET stream request to resource given in `args`.
 
         Args:
             *args: Variable length list of path components used to construct
                 the path to the resource to GET.
-            params (dict): Parameters dictionary to pass through to request.get.
+            params: Parameters dictionary to pass through to request.get.
 
         Returns:
             The requests.models.Response object if the request was successful.
@@ -221,11 +225,11 @@ class APIGatewayClient:
                 raises a RequestException of any kind.
         """
 
-        r = self._make_req(*args, req_type='STREAM', req_param=params)
+        r = self._make_req(*args, req_type='STREAM', req_param=params, **kwargs)
 
         return r
 
-    def post(self, *args, payload=None, json=None):
+    def post(self, *args: str, payload: Optional[Dict] = None, json: Optional[Dict] = None, **kwargs: Any) -> Response:
         """Issue an HTTP POST request to resource given in `args`.
 
         Args:
@@ -242,11 +246,11 @@ class APIGatewayClient:
                 raises a RequestException of any kind.
         """
 
-        r = self._make_req(*args, req_type='POST', req_param=payload, json=json)
+        r = self._make_req(*args, req_type='POST', req_param=payload, json=json, **kwargs)
 
         return r
 
-    def put(self, *args, payload=None, json=None):
+    def put(self, *args: str, payload: Optional[Dict] = None, json: Optional[Dict] = None, **kwargs: Any) -> Response:
         """Issue an HTTP PUT request to resource given in `args`.
 
         Args:
@@ -263,11 +267,11 @@ class APIGatewayClient:
                 raises a RequestException of any kind.
         """
 
-        r = self._make_req(*args, req_type='PUT', req_param=payload, json=json)
+        r = self._make_req(*args, req_type='PUT', req_param=payload, json=json, **kwargs)
 
         return r
 
-    def patch(self, *args, payload=None, json=None):
+    def patch(self, *args: str, payload: Optional[Dict] = None, json: Optional[Dict] = None, **kwargs: Any) -> Response:
         """Issue an HTTP PATCH request to resource given in `args`.
 
         Args:
@@ -284,11 +288,11 @@ class APIGatewayClient:
                 raises a RequestException of any kind.
         """
 
-        r = self._make_req(*args, req_type='PATCH', req_param=payload, json=json)
+        r = self._make_req(*args, req_type='PATCH', req_param=payload, json=json, **kwargs)
 
         return r
 
-    def delete(self, *args):
+    def delete(self, *args: str, **kwargs: Any) -> Response:
         """Issue an HTTP DELETE resource given in `args`.
 
         Args:
@@ -303,6 +307,6 @@ class APIGatewayClient:
                 raises a RequestException of any kind.
         """
 
-        r = self._make_req(*args, req_type='DELETE')
+        r = self._make_req(*args, req_type='DELETE', **kwargs)
 
         return r

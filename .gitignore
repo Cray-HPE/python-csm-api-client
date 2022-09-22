@@ -3,7 +3,7 @@
 
 # setuptools artifacts
 build/
-dis/
+dist/
 *.egg-info
 
 # pyenv versioning file
@@ -16,3 +16,8 @@ venv
 *.swp
 
 nosetests.xml
+.coverage
+
+# Don't commit the lock file, we want to allow flexibility for other downstream
+# products
+poetry.lock

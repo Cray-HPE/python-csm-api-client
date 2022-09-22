@@ -31,13 +31,13 @@ import subprocess
 import unittest
 from unittest.mock import Mock, patch, PropertyMock
 
-from sat.apiclient.vcs import VCSError, VCSRepo
+from csm_api_client.service.vcs import VCSError, VCSRepo
 
 
 class TestVCSRepo(unittest.TestCase):
     """Tests for the VCSRepo class."""
     def setUp(self):
-        self.repo_name = 'sat-config-management'
+        self.repo_name = 'csm_api_client-config-management'
         self.repo_path = f'/vcs/cray/{self.repo_name}.git'
         self.vcs_host = 'api-gw-service-nmn.local'
         self.clone_url = f'https://{self.vcs_host}{self.repo_path}'
@@ -45,9 +45,9 @@ class TestVCSRepo(unittest.TestCase):
 
         self.vcs_username = 'crayvcs'
 
-        self.mock_subprocess_run = patch('sat.apiclient.vcs.subprocess.run').start()
-        self.mock_load_kube_config = patch('sat.apiclient.vcs.load_kube_config').start()
-        self.mock_k8s_api_cls = patch('sat.apiclient.vcs.CoreV1Api').start()
+        self.mock_subprocess_run = patch('csm_api_client.service.vcs.subprocess.run').start()
+        self.mock_load_kube_config = patch('csm_api_client.service.vcs.load_kube_config').start()
+        self.mock_k8s_api_cls = patch('csm_api_client.service.vcs.CoreV1Api').start()
         self.mock_k8s_api = self.mock_k8s_api_cls.return_value
         mock_vcs_secret_data = {'vcs_username': base64.b64encode(self.vcs_username.encode('utf-8'))}
         self.mock_k8s_api.read_namespaced_secret.return_value = Mock(data=mock_vcs_secret_data)
@@ -110,7 +110,7 @@ class TestVCSRepo(unittest.TestCase):
 
     def test_getting_commit_hashes_for_versions(self):
         """Test getting a commit hash for the current version"""
-        with patch('sat.apiclient.vcs.VCSRepo.remote_refs',
+        with patch('csm_api_client.service.vcs.VCSRepo.remote_refs',
                    new_callable=PropertyMock) as mock_remote_refs:
             commit_hash = '6e42d6e57855cfe022c5481efa7c971114ee1688'
             mock_remote_refs.return_value = {
