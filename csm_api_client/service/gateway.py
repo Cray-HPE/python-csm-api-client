@@ -92,7 +92,7 @@ class APIGatewayClient:
         self.session = session
         self.timeout = timeout
 
-    def set_timeout(self, timeout: int) -> None:
+    def set_timeout(self, timeout: Optional[int]) -> None:
         self.timeout = timeout
 
     @staticmethod
