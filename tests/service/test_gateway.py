@@ -1,7 +1,7 @@
 #
 # MIT License
 #
-# (C) Copyright 2019-2022 Hewlett Packard Enterprise Development LP
+# (C) Copyright 2019-2023 Hewlett Packard Enterprise Development LP
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -127,6 +127,39 @@ class TestAPIGatewayClient(unittest.TestCase):
         payload = {}
         with self.assertRaises(APIError):
             client.put(*path_components, payload=payload)
+
+    def test_patch(self):
+        """Test patch method."""
+        client = APIGatewayClient(self.mock_session, timeout=60)
+        path_components = ['foo', 'bar', 'baz']
+        payload = {}
+        client.patch(*path_components, payload=payload)
+
+        self.mock_session.session.patch.assert_called_once_with(
+            get_http_url_prefix(self.api_gw_host) + '/'.join(path_components),
+            data=payload, json=None, timeout=60
+        )
+
+    def test_patch_json(self):
+        """Test patch method with json payload."""
+        client = APIGatewayClient(self.mock_session, timeout=60)
+        path_components = ['foo', 'bar', 'baz']
+        json_payload = {'field': 'value'}
+        client.patch(*path_components, json=json_payload)
+
+        self.mock_session.session.patch.assert_called_once_with(
+            get_http_url_prefix(self.api_gw_host) + '/'.join(path_components),
+            data=None, json=json_payload, timeout=60
+        )
+
+    def test_patch_exception(self):
+        """Test patch method with exception during PATCH."""
+        self.mock_session.session.patch.side_effect = requests.exceptions.RequestException
+        client = APIGatewayClient(self.mock_session)
+        path_components = ['foo', 'bar', 'baz']
+        payload = {}
+        with self.assertRaises(APIError):
+            client.patch(*path_components, payload=payload)
 
     def test_delete(self):
         """Test delete method."""
