@@ -1,7 +1,7 @@
 #
 # MIT License
 #
-# (C) Copyright 2019-2022 Hewlett Packard Enterprise Development LP
+# (C) Copyright 2019-2023 Hewlett Packard Enterprise Development LP
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -91,21 +91,20 @@ class UserSession(Session):
         self.username = username
         self.token_filename = token_filename
         self.host = host
+        self.fetched_token = None
 
         super().__init__(host, cert_verify, self.session_opts)
 
     @cached_property
-    def token(self) -> Optional[Dict[str, str]]:
-        """dict: Deserialized authentication token.
-        """
-
+    def token_file_contents(self) -> Optional[Dict[str, str]]:
+        """The contents of the token file, if it can be read, or None otherwise"""
         if not os.path.exists(self.token_filename):
             return None
-
         try:
             with open(self.token_filename, 'r') as f:
                 token = json.load(f)
                 LOGGER.debug('Loaded auth token from %s.', self.token_filename)
+                return token
 
         except json.JSONDecodeError as err:
             LOGGER.error('Unable to parse token: %s.', err)
@@ -115,7 +114,14 @@ class UserSession(Session):
             LOGGER.error("Unable to create token file '%s': %s", self.token_filename, err)
             return None
 
-        return token
+    @property
+    def token(self) -> Optional[Dict[str, str]]:
+        """dict: Deserialized authentication token.
+        """
+        if self.fetched_token:
+            return self.fetched_token
+
+        return self.token_file_contents
 
     def save(self) -> None:
         """Serializes an authentication token.
@@ -152,11 +158,11 @@ class UserSession(Session):
         opts.update(self.session_opts)
 
         try:
-            self._token = self.session.fetch_token(token_url=self.token_url,
-                                                   username=self.username, password=password, **opts)
+            self.fetched_token = self.session.fetch_token(token_url=self.token_url,
+                                                          username=self.username, password=password, **opts)
         except (MissingTokenError, UnauthorizedClientError, InvalidGrantError):
             # Avoid recording the authenticated user in the log file
-            self._token = None
+            self.fetched_token = None
 
     @cached_property
     def session_opts(self) -> Dict:

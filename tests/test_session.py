@@ -1,7 +1,7 @@
 #
 # MIT License
 #
-# (C) Copyright 2022 Hewlett Packard Enterprise Development LP
+# (C) Copyright 2022-2023 Hewlett Packard Enterprise Development LP
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -24,7 +24,9 @@
 
 import base64
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
+
+import requests_oauthlib
 
 from csm_api_client.session import AdminSession, UserSession
 
@@ -61,6 +63,11 @@ class TestSession(unittest.TestCase):
             'client_id': 'shasta',
         }
         self.mock_post.return_value.json.return_value = self.token_resp
+        self.mock_path_exists = patch('csm_api_client.session.os.path.exists', return_value=False).start()
+
+        self.mock_session = MagicMock(autospec=requests_oauthlib.OAuth2Session)
+        self.mock_session.fetch_token.return_value = self.token_resp
+        patch('csm_api_client.session.OAuth2Session', return_value=self.mock_session).start()
 
     def tearDown(self):
         patch.stopall()
@@ -78,6 +85,32 @@ class TestSession(unittest.TestCase):
         self.assertEqual(session.host, self.host)
         self.assertEqual(session.token_filename, self.token_filename)
         self.assertEqual(session.session.verify, self.cert_verify)
+
+    def test_token_not_none_when_fetched(self):
+        """Test that the token can be fetched"""
+        session = UserSession(
+            self.host,
+            cert_verify=self.cert_verify,
+            username=self.user,
+            token_filename=self.token_filename,
+        )
+        session.fetch_token('some_password')
+        self.assertEqual(session.token, self.token_resp)
+
+    def test_token_can_be_loaded_from_file(self):
+        """Test that the token can be loaded from a file"""
+        self.mock_path_exists.return_value = True
+        with patch('csm_api_client.session.open'), \
+                patch('csm_api_client.session.json.load', return_value=self.token_resp):
+            session = UserSession(
+                self.host,
+                cert_verify=self.cert_verify,
+                username=self.user,
+                token_filename=self.token_filename,
+            )
+            self.assertEqual(session.fetched_token, None)
+            self.assertEqual(session.token, self.token_resp)
+            self.mock_session.fetch_token.assert_not_called()
 
     def test_creating_admin_session(self):
         """Test that kubernetes is queried properly when constructing AdminSession"""
