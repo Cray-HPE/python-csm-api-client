@@ -34,6 +34,7 @@ import os.path
 import os
 from typing import Any, Dict, Optional
 
+from kubernetes.client import CoreV1Api
 from oauthlib.oauth2 import (UnauthorizedClientError, MissingTokenError,
                              InvalidGrantError, LegacyApplicationClient)
 import requests
@@ -180,7 +181,7 @@ class AdminSession(Session):
 
     @cached_property
     def token(self) -> Optional[Dict[str, str]]:
-        k8s = load_kube_api()
+        k8s: CoreV1Api = load_kube_api()
         admin_client_auth = k8s.read_namespaced_secret('admin-client-auth', 'default')
         auth_req_payload = {
             'grant_type': 'client_credentials',
