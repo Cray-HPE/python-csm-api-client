@@ -1,7 +1,7 @@
 #
 # MIT License
 #
-# (C) Copyright 2021-2022 Hewlett Packard Enterprise Development LP
+# (C) Copyright 2021-2023 Hewlett Packard Enterprise Development LP
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -27,7 +27,6 @@ Basic client library for CFS.
 import os.path
 from datetime import datetime, timedelta
 from enum import Enum
-import fnmatch
 from itertools import chain
 import json
 import logging
@@ -663,43 +662,54 @@ class CFSImageConfigurationSession:
             The command that the admin should run to debug the failure,
                 or None if no command is available or necessary.
         """
-        container_execution_order = [
-            'inventory',
-            'ansible-*',
-            'teardown'
-        ]
 
         # This shouldn't happen but protect against it anyway
         if self.pod is None or self.pod.metadata is None:
             return None
 
         kubectl_cmd = f'kubectl logs -n {self.KUBE_NAMESPACE} {self.pod.metadata.name}'
-        if self.failed_init_containers:
+        failed_container = self.get_first_failed_container(
+            self.failed_init_containers,
+            self.failed_containers
+        )
+        if failed_container is None:
+            return None
+
+        return f'{kubectl_cmd} -c {failed_container}'
+
+    @staticmethod
+    def get_first_failed_container(
+        failed_init_containers: list[str],
+        failed_containers: list[str]
+    ) -> Optional[str]:
+        container_execution_order_prefixes = [
+            'inventory',
+            'ansible',
+            'teardown'
+        ]
+        if failed_init_containers:
             # If any init containers fail, none of the (non-init) containers
             # will be run. Kubernetes init containers are executed in-order, so
             # the following line works on the assumption that nothing is
             # modifying the ordering of the containers.
-            failed_container = self.failed_init_containers[0]
-        elif self.failed_containers:
-            for container_name_pattern in container_execution_order:
-                failed_containers = [name for name in self.failed_containers
-                                     if fnmatch.fnmatch(name, container_name_pattern)]
-                if failed_containers:
+            return failed_init_containers[0]
+        elif failed_containers:
+            for container_name_prefix in container_execution_order_prefixes:
+                matching_failed_containers = [name for name in failed_containers
+                                              if name.startswith(container_name_prefix)]
+                if matching_failed_containers:
                     def extract_numeric_suffix(s: str) -> int:
                         match = re.search(r'([0-9]+)$', s)
                         if match is None:
                             return 0
                         return int(match.group(0))
-                    failed_container = min(failed_containers, key=extract_numeric_suffix)
-                    break
+                    return min(matching_failed_containers, key=extract_numeric_suffix)
             else:
                 # Some container failed that is not listed in the execution
                 # order above.
                 return None
         else:
             return None
-
-        return f'{kubectl_cmd} -c {failed_container}'
 
     def update_cfs_status(self) -> None:
         """Query the CFS API to update the status of this CFS session
