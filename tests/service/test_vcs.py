@@ -1,7 +1,7 @@
 #
 # MIT License
 #
-# (C) Copyright 2021-2022 Hewlett Packard Enterprise Development LP
+# (C) Copyright 2021-2023 Hewlett Packard Enterprise Development LP
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -46,9 +46,8 @@ class TestVCSRepo(unittest.TestCase):
         self.vcs_username = 'crayvcs'
 
         self.mock_subprocess_run = patch('csm_api_client.service.vcs.subprocess.run').start()
-        self.mock_load_kube_config = patch('csm_api_client.service.vcs.load_kube_config').start()
-        self.mock_k8s_api_cls = patch('csm_api_client.service.vcs.CoreV1Api').start()
-        self.mock_k8s_api = self.mock_k8s_api_cls.return_value
+        self.mock_load_kube_api = patch('csm_api_client.service.vcs.load_kube_api').start()
+        self.mock_k8s_api = self.mock_load_kube_api.return_value
         mock_vcs_secret_data = {'vcs_username': base64.b64encode(self.vcs_username.encode('utf-8'))}
         self.mock_k8s_api.read_namespaced_secret.return_value = Mock(data=mock_vcs_secret_data)
 

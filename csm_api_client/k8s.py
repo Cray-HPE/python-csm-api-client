@@ -1,7 +1,7 @@
 #
 # MIT License
 #
-# (C) Copyright 2022 Hewlett Packard Enterprise Development LP
+# (C) Copyright 2022-2023 Hewlett Packard Enterprise Development LP
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -24,20 +24,36 @@
 Utility functions for interacting with Kubernetes.
 """
 
+import logging
+from typing import Any, Type, TypeVar
 import warnings
 
 from kubernetes.client import CoreV1Api
-from kubernetes.config import load_kube_config
 from kubernetes.config.config_exception import ConfigException
+from kubernetes.config.kube_config import load_kube_config
+from kubernetes.config.incluster_config import load_incluster_config
 # YAMLLoadWarning is not defined in types-PyYAML.
 from yaml import YAMLLoadWarning  # type: ignore[attr-defined]
 
 
-def load_kube_api() -> CoreV1Api:
+LOGGER = logging.getLogger(__name__)
+
+
+T = TypeVar("T")
+
+
+def load_kube_api(api_cls: Type[T] = CoreV1Api, **kwargs: Any) -> T:
     """Get a Kubernetes CoreV1Api object.
 
-    This helper function loads the kube config and then instantiates
-    an API object.
+    This helper function loads the kubeconfig and then instantiates
+    an API object. It will first attempt to load the configuration
+    from the in-cluster config, if available, and will fall back to
+    the config file if that doesn't work for any reason. Note that this
+    order is the reverse of that in the `kubernetes.config.load_config()`
+    helper function.
+
+    Args:
+        api_cls: the type of the API object to construct.
 
     Returns:
         The API object from the kubernetes library.
@@ -47,14 +63,20 @@ def load_kube_api() -> CoreV1Api:
             kubernetes configuration.
     """
     try:
-        with warnings.catch_warnings():
-            warnings.filterwarnings('ignore', category=YAMLLoadWarning)
-            load_kube_config()
-    # Earlier versions: FileNotFoundError; later versions: ConfigException
-    except (FileNotFoundError, ConfigException) as err:
-        raise ConfigException(
-            'Failed to load kubernetes config to get pod status: '
-            '{}'.format(err)
-        )
+        load_incluster_config()
+    except ConfigException as exc:
+        LOGGER.debug("Couldn't load the in-cluster config: %s "
+                     "(proceeding under the assumption that the config "
+                     "should be loaded from the kubeconfig file)",
+                     exc)
+        try:
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore', category=YAMLLoadWarning)
+                load_kube_config()
+        # Earlier versions: FileNotFoundError; later versions: ConfigException
+        except (FileNotFoundError, ConfigException) as err:
+            raise ConfigException(
+                'Failed to load kubernetes config: {}'.format(err)
+            ) from err
 
-    return CoreV1Api()
+    return api_cls(**kwargs)

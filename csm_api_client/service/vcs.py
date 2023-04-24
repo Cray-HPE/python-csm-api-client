@@ -1,7 +1,7 @@
 #
 # MIT License
 #
-# (C) Copyright 2021-2022 Hewlett Packard Enterprise Development LP
+# (C) Copyright 2021-2023 Hewlett Packard Enterprise Development LP
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -42,8 +42,10 @@ from typing import (
 )
 from urllib.parse import urlparse, urlunparse
 
-from kubernetes.config import load_kube_config
 from kubernetes.client import CoreV1Api
+from kubernetes.config.config_exception import ConfigException
+
+from csm_api_client.k8s import load_kube_api
 
 
 LOGGER = logging.getLogger(__name__)
@@ -111,8 +113,10 @@ class VCSRepo:
         Raises:
             VCSError: if unable to read the vcs_username from the K8s secret.
         """
-        load_kube_config()
-        k8s_api = CoreV1Api()
+        try:
+            k8s_api: CoreV1Api = load_kube_api()
+        except ConfigException as exc:
+            raise VCSError(f'Unable to load Kubernetes API: {exc}')
 
         username = k8s_api.read_namespaced_secret('vcs-user-credentials', 'services').data.get('vcs_username')
         if username is None:
