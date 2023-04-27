@@ -1,7 +1,7 @@
 #
 # MIT License
 #
-# (C) Copyright 2021-2022 Hewlett Packard Enterprise Development LP
+# (C) Copyright 2021-2023 Hewlett Packard Enterprise Development LP
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -38,6 +38,7 @@ from csm_api_client.service.cfs import (
     CFSConfiguration,
     CFSConfigurationError,
     CFSConfigurationLayer,
+    CFSImageConfigurationSession,
     LayerState,
     MAX_BRANCH_NAME_WIDTH,
 )
@@ -693,3 +694,33 @@ class TestCFSConfiguration(unittest.TestCase):
 
         self.assertEqual(layers_before, self.single_layer_config.layers)
         self.assertFalse(self.single_layer_config.changed)
+
+
+class TestCFSDebugCommand(unittest.TestCase):
+    """Test getting the kubectl log command to debug a failing CFS job"""
+
+    def setUp(self):
+        self.failed_container = CFSImageConfigurationSession.get_first_failed_container
+
+    def test_get_failing_init_container(self):
+        """Check that init containers are always selected first"""
+        for containers in [[], ['some', 'other', 'containers'], ['onecontainer']]:
+            self.assertEqual(self.failed_container(['init'], containers), 'init')
+
+    def test_get_failing_inventory_container(self):
+        """Check that the inventory container is selected first"""
+        for containers in [['inventory', 'ansible-1', 'teardown'], ['teardown', 'inventory', 'ansible']]:
+            self.assertEqual(self.failed_container([], containers), 'inventory')
+
+    def test_get_failing_ansible_container(self):
+        """Check that the first ansible container is selected first"""
+        self.assertEqual(self.failed_container([], ['ansible-3', 'ansible-1', 'ansible-2', 'teardown']), 'ansible-1')
+        self.assertEqual(self.failed_container([], ['ansible', 'teardown']), 'ansible')
+
+    def test_get_failing_teardown_container(self):
+        """Check that the teardown container is selected when failing"""
+        self.assertEqual(self.failed_container([], ['teardown']), 'teardown')
+
+    def test_no_message_when_no_failing_containers(self):
+        """Check that no debug message is given if there are no failing containers"""
+        self.assertIsNone(self.failed_container([], []))
