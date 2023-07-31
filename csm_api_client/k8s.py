@@ -26,14 +26,11 @@ Utility functions for interacting with Kubernetes.
 
 import logging
 from typing import Any, Type, TypeVar
-import warnings
 
 from kubernetes.client import CoreV1Api
 from kubernetes.config.config_exception import ConfigException
 from kubernetes.config.kube_config import load_kube_config
 from kubernetes.config.incluster_config import load_incluster_config
-# YAMLLoadWarning is not defined in types-PyYAML.
-from yaml import YAMLLoadWarning  # type: ignore[attr-defined]
 
 
 LOGGER = logging.getLogger(__name__)
@@ -70,9 +67,7 @@ def load_kube_api(api_cls: Type[T] = CoreV1Api, **kwargs: Any) -> T:
                      "should be loaded from the kubeconfig file)",
                      exc)
         try:
-            with warnings.catch_warnings():
-                warnings.filterwarnings('ignore', category=YAMLLoadWarning)
-                load_kube_config()
+            load_kube_config()
         # Earlier versions: FileNotFoundError; later versions: ConfigException
         except (FileNotFoundError, ConfigException) as err:
             raise ConfigException(
