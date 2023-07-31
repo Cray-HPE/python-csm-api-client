@@ -679,8 +679,8 @@ class CFSImageConfigurationSession:
 
     @staticmethod
     def get_first_failed_container(
-        failed_init_containers: list[str],
-        failed_containers: list[str]
+        failed_init_containers: List[str],
+        failed_containers: List[str]
     ) -> Optional[str]:
         container_execution_order_prefixes = [
             'inventory',
