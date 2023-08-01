@@ -25,6 +25,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.5] - 2023-07-31
+
+### Changed
+- Upgrade build pipeline from Poetry 1.2.0 to Poetry 1.5.1
+- Allow use of PyYAML versions later than 6.0 in order to allow us to pick up
+  the latest version which fixes a compatibility issue with Cython 3.0.
+
+### Fixed
+- Restore Python 3.8 compatibility by fixing type hints to use `typing.List`
+  instead of `list` with subscripts.
+
 ## [1.1.4] - 2023-04-19
 
 ### Changed
