@@ -31,11 +31,13 @@ from itertools import chain
 import json
 import logging
 import re
+import shutil
 from typing import (
     Dict,
     Iterable,
     List,
     Optional,
+    Union
 )
 from urllib.parse import urlparse, urlunparse
 import uuid
@@ -384,7 +386,7 @@ class CFSConfiguration:
         return {'layers': [layer.req_payload for layer in self.layers]}
 
     def save_to_cfs(self, name: Optional[str] = None,
-                    overwrite: bool = True) -> 'CFSConfiguration':
+                    overwrite: bool = True, backup_suffix: Union[str, None] = None) -> 'CFSConfiguration':
         """Save the configuration to CFS, optionally with a new name.
 
         Args:
@@ -394,6 +396,9 @@ class CFSConfiguration:
                 configuration given by `name`. If False, raise a
                 CFSConfigurationError if a configuration with `name` already
                 exists
+            backup_suffix: if specified, before saving the current version of
+                the CFS configuration, if it already exists in CFS, save a
+                backup with the given suffix.
 
         Returns:
             the new configuration that was saved to CFS
@@ -409,23 +414,42 @@ class CFSConfiguration:
         else:
             raise ValueError('A name must be specified for the CFS configuration.')
 
-        # If overwriting is disabled, throw an error if we try to overwrite a
-        # configuration
-        if not overwrite:
+        existing_cfs_config_data = None
+        # Check if a CFS configuration with the given name already exists when
+        # overwrite is disallowed or when a backup is requested.
+        if not overwrite or backup_suffix:
             try:
                 response = self._cfs_client.get('configurations', cfs_name, raise_not_ok=False)
 
                 # If response was OK, that indicates there's already a CFS configuration
                 if response.ok:
-                    raise CFSConfigurationError(f'A configuration named {cfs_name} already exists '
-                                                f'and will not be overwritten.')
+                    try:
+                        existing_cfs_config_data = response.json()
+                    except ValueError as err:
+                        raise CFSConfigurationError(f'Failed to decode JSON response from reading'
+                                                    f'existing CFS configuration "{cfs_name}": {err}')
+
                 elif response.status_code != 404:
                     # If there's a failure for any reason other than a missing
-                    # configuration, throw an APIError
+                    # configuration, throw the APIError and catch it below
                     self._cfs_client.raise_from_response(response)
 
             except APIError as err:
-                raise CFSConfigurationError(f'Failed to retrieve CFS configuration "{cfs_name}": {err}')
+                raise CFSConfigurationError(f'Failed to check for existing CFS '
+                                            f'configuration "{cfs_name}": {err}') from err
+
+        if existing_cfs_config_data:
+            if not overwrite:
+                raise CFSConfigurationError(f'A configuration named {cfs_name} already exists '
+                                            f'and will not be overwritten.')
+            if backup_suffix:
+                backup_config_name = f'{cfs_name}{backup_suffix}'
+                try:
+                    backup_config = CFSConfiguration(self._cfs_client, existing_cfs_config_data)
+                    backup_config.save_to_cfs(name=backup_config_name)
+                except CFSConfigurationError as err:
+                    raise CFSConfigurationError(f'Failed to back up CFS configuration "{cfs_name}" '
+                                                f'to "{backup_config_name}": {err}') from err
 
         try:
             response_json = self._cfs_client.put('configurations', cfs_name,
@@ -439,14 +463,18 @@ class CFSConfiguration:
         LOGGER.info('Successfully saved CFS configuration "%s"', cfs_name)
         return CFSConfiguration(self._cfs_client, response_json)
 
-    def save_to_file(self, file_path: str, overwrite: bool = True) -> None:
+    def save_to_file(self, file_path: str, overwrite: bool = True,
+                     backup_suffix: Union[str, None] = None) -> None:
         """Save the configuration to a file.
 
         Args:
             file_path: the path to the file where this config should be saved
             overwrite: if True, silently overwrite an existing file
-            given by `file_path`. If False, raise a CFSConfigurationError if
-            `file_path` already exists.
+                given by `file_path`. If False, raise a CFSConfigurationError if
+                `file_path` already exists.
+            backup_suffix: if specified, before saving the current version of
+                the CFS configuration to a file, if the file already exists,
+                save a backup file with the given suffix.
 
         Returns:
             None
@@ -455,6 +483,18 @@ class CFSConfiguration:
             CFSConfigurationError: if there is a failure saving the configuration
                 to the file, or if the file exists and overwrite is `False`.
         """
+        # It only makes sense to make a backup copy if overwriting is requested
+        if backup_suffix and overwrite:
+            path_without_ext, ext = os.path.splitext(file_path)
+            backup_file_path = f'{path_without_ext}{backup_suffix}{ext}'
+            try:
+                shutil.copyfile(file_path, backup_file_path)
+            except FileNotFoundError:
+                LOGGER.debug(f'File {file_path} does not exist so does not need to be backed up.')
+            except OSError as err:
+                raise CFSConfigurationError(f'Failed to copy {file_path} to {backup_file_path} '
+                                            f'before overwriting: {err}') from err
+
         try:
             with open(file_path, 'w' if overwrite else 'x') as f:
                 json.dump(self.req_payload, f, indent=2)

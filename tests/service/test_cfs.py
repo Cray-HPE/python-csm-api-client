@@ -30,7 +30,7 @@ import logging
 from copy import deepcopy
 import datetime
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, call, patch
 
 from cray_product_catalog.query import ProductCatalogError
 
@@ -616,6 +616,52 @@ class TestCFSConfiguration(unittest.TestCase):
 
         with self.assertRaisesRegex(CFSConfigurationError, err_regex):
             self.single_layer_config.save_to_cfs()
+
+    def test_save_to_cfs_backup_when_existing(self):
+        """Test save_to_cfs creates a backup when the configuration already exists."""
+        self.mock_cfs_client.get.return_value.status_code = 200
+        config_name = self.single_layer_config_data['name']
+        layers = self.single_layer_config_data['layers']
+        backup_suffix = '.backup'
+
+        # Set up some Mock config objects as CFSConfiguration return values
+        # The first one is the backup copy of the CFSConfiguration
+        backup_config = Mock()
+        # The second one is the new configuration after it's saved to CFS
+        new_config = Mock()
+        mock_cfs_configs = [backup_config, new_config]
+
+        with patch('csm_api_client.service.cfs.CFSConfiguration') as mock_cfs_config_cls:
+            mock_cfs_config_cls.side_effect = mock_cfs_configs
+            updated_config = self.single_layer_config.save_to_cfs(config_name, backup_suffix=backup_suffix)
+
+        self.mock_cfs_client.put.assert_called_once_with(
+            'configurations', config_name, json={'layers': layers}
+        )
+
+        mock_cfs_config_cls.assert_has_calls([
+            call(self.mock_cfs_client, self.mock_cfs_client.get.return_value.json.return_value),
+            call(self.mock_cfs_client, self.mock_cfs_client.put.return_value.json.return_value)
+        ])
+        backup_config.save_to_cfs.assert_called_once_with(name=f'{config_name}{backup_suffix}')
+        self.assertEqual(new_config, updated_config)
+
+    def test_save_to_cfs_backup_when_not_existing(self):
+        """Test save_to_cfs creates a backup when the configuration does not exist"""
+        self.mock_cfs_client.get.return_value.ok = False
+        self.mock_cfs_client.get.return_value.status_code = 404
+        layers = self.single_layer_config_data['layers']
+        new_name = 'some-new-name'
+
+        with patch('csm_api_client.service.cfs.CFSConfiguration') as mock_cfs_config_cls:
+            saved_config = self.single_layer_config.save_to_cfs(new_name, backup_suffix='.backup')
+
+        self.mock_cfs_client.put.assert_called_once_with(
+            'configurations', new_name, json={'layers': layers}
+        )
+        mock_cfs_config_cls.assert_called_once_with(
+            self.mock_cfs_client, self.mock_cfs_client.put.return_value.json.return_value)
+        self.assertEqual(mock_cfs_config_cls.return_value, saved_config)
 
     def test_save_to_file(self):
         """Test that saving configuration to a file works"""
