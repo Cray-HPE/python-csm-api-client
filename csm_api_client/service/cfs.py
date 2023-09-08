@@ -1091,3 +1091,58 @@ k
                                xname, err)
 
         return [self.get_configuration(config_name) for config_name in desired_config_names]
+
+    def get_component_ids_using_config(self, config_name: str) -> List[str]:
+        """Get a list of CFS components using the given CFS configuration.
+
+        Args:
+            config_name: the name of the CFS configuration to search for
+                components using it
+
+        Returns:
+            The list of component IDs of CFS components using the given CFS
+            configuration as their desiredConfig.
+        """
+        try:
+            components = self.get('components', params={'configName': config_name}).json()
+        except (APIError, ValueError) as err:
+            raise APIError(f'Failed to get components using configuration '
+                           f'"{config_name}": {err}') from err
+        try:
+            return [component['id'] for component in components]
+        except KeyError as err:
+            raise APIError(f'Failed to get components using configuration "{config_name}: '
+                           f'one or more components missing {err} property') from err
+
+    def update_component(self, component_id: str, desired_config: Optional[str] = None,
+                         clear_state: Optional[bool] = None, clear_error: Optional[bool] = None,
+                         enabled: Optional[bool] = None) -> None:
+        """Update a CFS component with the given parameters.
+
+        Args:
+            component_id: the id (xname) of the component to be updated
+            desired_config: the desiredConfig of the component
+            clear_state: if True, clear the state of the component
+            clear_error: if True, clear the errorCount of the component
+            enabled: if specified, set the enabled property of the component
+
+        Returns: None
+
+        Raises:
+            APIError: if there is a failure to update the given component
+        """
+        patch_params: Dict = {}
+        if desired_config is not None:
+            patch_params['desiredConfig'] = desired_config
+        if enabled is not None:
+            patch_params['enabled'] = enabled
+        if clear_state:
+            patch_params['state'] = []
+        if clear_error:
+            patch_params['errorCount'] = 0
+
+        if patch_params:
+            self.patch('components', component_id, json=patch_params)
+        else:
+            LOGGER.warning(f'No property changes were requested during update '
+                           f'of CFS component with id {component_id}.')

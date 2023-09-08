@@ -29,12 +29,14 @@ import json
 import logging
 from copy import deepcopy
 import datetime
+from typing import List
 import unittest
 from unittest.mock import Mock, call, patch
 
 from cray_product_catalog.query import ProductCatalogError
 
 from csm_api_client.service.cfs import (
+    CFSClient,
     CFSConfiguration,
     CFSConfigurationError,
     CFSConfigurationLayer,
@@ -770,3 +772,95 @@ class TestCFSDebugCommand(unittest.TestCase):
     def test_no_message_when_no_failing_containers(self):
         """Check that no debug message is given if there are no failing containers"""
         self.assertIsNone(self.failed_container([], []))
+
+
+class TestCFSClient(unittest.TestCase):
+    """Tests for the CFSClient class"""
+
+    @staticmethod
+    def get_components(component_ids: List[str]) -> List[dict]:
+        """Get a fake list of components"""
+        components = []
+        for component_id in component_ids:
+            components.append({
+                'configurationStatus': 'configured',
+                'desiredConfig': 'management-23.11',
+                'enabled': True,
+                'errorCount': 0,
+                'id': component_id,
+                'state': [],
+                'tags': {}
+            })
+        return components
+
+    def test_get_component_ids_using_config(self):
+        """Test get_component_ids_using_config"""
+        component_ids = ['x3000c0s1b0n0', 'x3000c0s3b0n0', 'x3000c0s5b0n0']
+        components = self.get_components(component_ids)
+        # For the test, it doesn't have to match, but be consistent to avoid confusion
+        config_name = components[0]['desiredConfig']
+        cfs_client = CFSClient(Mock())
+
+        with patch.object(cfs_client, 'get') as mock_get:
+            mock_get.return_value.json.return_value = components
+            result = cfs_client.get_component_ids_using_config(config_name)
+
+        mock_get.assert_called_once_with('components', params={'configName': config_name})
+        self.assertEqual(component_ids, result)
+
+    def test_get_component_ids_using_config_failure(self):
+        """Test get_component_ids_using_config when the request fails"""
+        cfs_client = CFSClient(Mock())
+        err_msg = 'Service unavailable'
+        config_name = 'some-config-name'
+
+        with patch.object(cfs_client, 'get', side_effect=APIError(err_msg)) as mock_get:
+            with self.assertRaisesRegex(APIError, 'Failed to get components '):
+                cfs_client.get_component_ids_using_config(config_name)
+
+        mock_get.assert_called_once_with('components', params={'configName': config_name})
+
+    def test_update_component_no_changes(self):
+        """Test update_component with no changes requested"""
+        cfs_client = CFSClient(Mock())
+        component_id = 'x1000c0s0b0n0'
+
+        with patch.object(cfs_client, 'patch') as mock_patch:
+            with self.assertLogs(level=logging.WARNING) as logs_cm:
+                cfs_client.update_component(component_id)
+
+        mock_patch.assert_not_called()
+        self.assertRegex(logs_cm.records[0].message,
+                         'No property changes were requested')
+
+    def test_update_component_only_desired_config(self):
+        """Test update_component with only a desired_config"""
+        cfs_client = CFSClient(Mock())
+        component_id = 'x3000c0s1b0n0'
+        desired_config = 'my-config'
+
+        with patch.object(cfs_client, 'patch') as mock_patch:
+            cfs_client.update_component(component_id, desired_config=desired_config)
+
+        mock_patch.assert_called_once_with('components', component_id,
+                                           json={'desiredConfig': desired_config})
+
+    def test_update_component_all_properties(self):
+        """Test update_component with all properties updated"""
+        cfs_client = CFSClient(Mock())
+        component_id = 'x3000c0s1b0n0'
+        desired_config = 'my-config'
+
+        with patch.object(cfs_client, 'patch') as mock_patch:
+            cfs_client.update_component(component_id, desired_config=desired_config,
+                                        enabled=True, clear_state=True, clear_error=True)
+
+        expected_json_payload = {
+            'desiredConfig': desired_config,
+            'enabled': True,
+            'state': [],
+            'errorCount': 0
+        }
+
+        mock_patch.assert_called_once_with('components', component_id,
+                                           json=expected_json_payload)
