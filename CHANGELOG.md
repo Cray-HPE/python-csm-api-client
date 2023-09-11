@@ -25,6 +25,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2023-08-14
+
+### Added
+- Added the ability to back up existing CFS configurations or files when saving
+  `CFSConfiguration` objects with `save_to_cfs` or `save_to_file` methods by
+  adding a `backup_suffix` argument.
+- Added a `get_component_ids_using_config` method to `CFSClient` that returns
+  the IDs of all components using a given configuration as their desiredConfig.
+- Added an `update_component` method to `CFSClient` that updates a given
+  component in CFS.
+
 ## [1.1.5] - 2023-07-31
 
 ### Changed
