@@ -1,7 +1,7 @@
 #
 # MIT License
 #
-# (C) Copyright 2021-2023 Hewlett Packard Enterprise Development LP
+# (C) Copyright 2021-2024 Hewlett Packard Enterprise Development LP
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -31,7 +31,7 @@ from copy import deepcopy
 import datetime
 from typing import List
 import unittest
-from unittest.mock import Mock, call, patch
+from unittest.mock import Mock, call, patch, MagicMock
 
 from cray_product_catalog.query import ProductCatalogError
 
@@ -772,6 +772,107 @@ class TestCFSDebugCommand(unittest.TestCase):
     def test_no_message_when_no_failing_containers(self):
         """Check that no debug message is given if there are no failing containers"""
         self.assertIsNone(self.failed_container([], []))
+
+
+class TestCFSUpdateContainerStatus(unittest.TestCase):
+    """Tests for the _update_container_status method of CFSImageConfigurationSession"""
+
+    def setUp(self):
+        """Create a CFSImageConfigurationSession to use in the tests"""
+        self.session_name = 'test_session'
+        self.image_name = 'test_image'
+        self.session = CFSImageConfigurationSession({'name': self.session_name},
+                                                    MagicMock(spec=CFSClient),
+                                                    self.image_name)
+
+        # Mock out a single init_container_status element
+        self.init_container_status = MagicMock()
+        self.init_container_status.name = 'git-clone'
+        self.init_container_status.state.running = None
+        self.init_container_status.state.terminated = MagicMock()
+        self.init_container_status.state.terminated.exit_code = 0
+        self.init_container_statuses = [self.init_container_status]
+
+        # Mock out two container_status elements
+        self.inventory_container_status = MagicMock()
+        self.inventory_container_status.name = 'inventory'
+        self.inventory_container_status.state.running = True
+        self.ansible_container_status = MagicMock()
+        self.ansible_container_status.name = 'ansible'
+        self.ansible_container_status.state.running = True
+        self.container_statuses = [self.inventory_container_status, self.ansible_container_status]
+
+        self.session.pod = MagicMock()
+        self.session.pod.status.init_container_statuses = self.init_container_statuses
+        self.session.pod.status.container_statuses = self.container_statuses
+
+    def test_update_container_status(self):
+        """Test _update_container_status when containers are successfully found"""
+        with self.assertLogs(level=logging.INFO) as logs_cm:
+            self.assertIsNone(self.session._update_container_status())
+
+        # One message is logged describing the session, and one for each container reporting status
+        # for the first time
+        self.assertEqual(4, len(logs_cm.records))
+        self.assertRegexpMatches(logs_cm.records[0].message,
+                                 f'CFS session: {self.session_name} *Image: {self.image_name}')
+        self.assertRegexpMatches(logs_cm.records[1].message,
+                                 'Container git-clone *transitioned to succeeded')
+        self.assertRegexpMatches(logs_cm.records[2].message,
+                                 'Container inventory *transitioned to running')
+        self.assertRegexpMatches(logs_cm.records[3].message,
+                                 'Container ansible *transitioned to running')
+
+        # Now simulate completion of the inventory and ansible container
+        self.inventory_container_status.state.running = None
+        self.inventory_container_status.state.terminated = MagicMock()
+        self.inventory_container_status.state.terminated.exit_code = 0
+        self.ansible_container_status.state.running = None
+        self.ansible_container_status.state.terminated = MagicMock()
+        self.ansible_container_status.state.terminated.exit_code = 0
+        # Update container status again
+        with self.assertLogs(level=logging.INFO) as logs_cm:
+            self.assertIsNone(self.session._update_container_status())
+
+        # One message is logged describing the session, and one for each container reporting new status
+        self.assertEqual(3, len(logs_cm.records))
+        self.assertRegexpMatches(logs_cm.records[0].message,
+                                 f'CFS session: {self.session_name} *Image: {self.image_name}')
+        self.assertRegexpMatches(logs_cm.records[1].message,
+                                 'Container inventory *transitioned to succeeded from running')
+        self.assertRegexpMatches(logs_cm.records[2].message,
+                                 'Container ansible *transitioned to succeeded from running')
+
+    def test_update_container_status_with_none_pod(self):
+        """Check that update_container_status returns None when pod is None"""
+        self.session.pod = None
+        self.assertIsNone(self.session._update_container_status())
+
+    def test_update_container_status_with_none_init_and_container_statuses(self):
+        """Check that update_container_status returns None when both init and container statuses are None"""
+        self.session.pod.status.init_container_statuses = None
+        self.session.pod.status.container_statuses = None
+
+        with self.assertLogs(level=logging.INFO) as logs_cm:
+            self.assertIsNone(self.session._update_container_status())
+
+        self.assertEqual(2, len(logs_cm.records))
+        self.assertRegexpMatches(logs_cm.records[0].message,
+                                 f'CFS session: {self.session_name} *Image: {self.image_name}')
+        self.assertRegexpMatches(logs_cm.records[1].message,
+                                 'Waiting for container statuses in pod: init_container_statuses is None')
+
+    def test_update_container_status_with_none_init_statuses(self):
+        """Check that update_container_status logs a message one of init_container_statuses is None"""
+        self.session.pod.status.init_container_statuses = [None, self.init_container_status]
+
+        with self.assertLogs(level=logging.DEBUG) as logs_cm:
+            self.assertIsNone(self.session._update_container_status())
+
+        for log_record in logs_cm.records:
+            if log_record.levelno == logging.DEBUG:
+                self.assertIn('Found a None container in init_container_status',
+                              logs_cm.records[0].message)
 
 
 class TestCFSClient(unittest.TestCase):
