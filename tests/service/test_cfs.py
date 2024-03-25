@@ -1,7 +1,7 @@
 #
 # MIT License
 #
-# (C) Copyright 2021-2023 Hewlett Packard Enterprise Development LP
+# (C) Copyright 2021-2024 Hewlett Packard Enterprise Development LP
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -31,7 +31,7 @@ from copy import deepcopy
 import datetime
 from typing import List
 import unittest
-from unittest.mock import Mock, call, patch
+from unittest.mock import Mock, call, patch, MagicMock
 
 from cray_product_catalog.query import ProductCatalogError
 
@@ -749,6 +749,7 @@ class TestCFSDebugCommand(unittest.TestCase):
 
     def setUp(self):
         self.failed_container = CFSImageConfigurationSession.get_first_failed_container
+        self.update_status = CFSImageConfigurationSession._update_container_status
 
     def test_get_failing_init_container(self):
         """Check that init containers are always selected first"""
@@ -772,6 +773,30 @@ class TestCFSDebugCommand(unittest.TestCase):
     def test_no_message_when_no_failing_containers(self):
         """Check that no debug message is given if there are no failing containers"""
         self.assertIsNone(self.failed_container([], []))
+
+    def test_update_container_status_with_none_pod(self):
+        """Check that update_container_status returns None when pod is None"""
+        session = CFSImageConfigurationSession({}, MagicMock(), 'test_image')
+        session.pod = None
+        self.assertIsNone(self.update_status(session))
+
+    def test_update_container_status_with_none_init_and_container_statuses(self):
+        """Check that update_container_status returns None when both init and container statuses are None"""
+        session = CFSImageConfigurationSession({}, MagicMock(), 'test_image')
+        session.pod = MagicMock()
+        session.pod.status.init_container_statuses = None
+        session.pod.status.container_statuses = None
+        self.assertIsNone(self.update_status(session))
+
+    def test_update_container_status_with_none_init_statuses(self):
+        """Check that update_container_status logs a message when init_container_statuses is None"""
+        session = CFSImageConfigurationSession({}, MagicMock(), 'test_image')
+        session.pod = MagicMock()
+        session.pod.status.init_container_statuses = [None,MagicMock()]
+        session.pod.status.container_statuses = [MagicMock()]
+        with self.assertLogs() as log:
+            self.update_status(session)
+        self.assertIn('Found a None container', log.output[0])
 
 
 class TestCFSClient(unittest.TestCase):
