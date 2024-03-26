@@ -1,7 +1,7 @@
 #
 # MIT License
 #
-# (C) Copyright 2021-2023 Hewlett Packard Enterprise Development LP
+# (C) Copyright 2021-2024 Hewlett Packard Enterprise Development LP
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -1001,7 +1001,7 @@ k
                            f'CFS session {name}: {err}')
 
     def create_image_customization_session(
-        self, config_name: str, image_id: str,
+        self, session_name: str, config_name: str, image_id: str,
         target_groups: Iterable[str], image_name: str
     ) -> CFSImageConfigurationSession:
         """Create a new image customization session.
@@ -1009,6 +1009,7 @@ k
         The session name will be generated with self.get_valid_session_name.
 
         Args:
+            session_name: the name of the session
             config_name: the name of the configuration to use
             image_id: the id of the IMS image to customize
             target_groups: the group names to target. Each group
@@ -1021,7 +1022,7 @@ k
             The created session
         """
         request_body = {
-            'name': self.get_valid_session_name(),
+            'name': session_name,
             'configurationName': config_name,
             'target': {
                 'definition': 'image',
