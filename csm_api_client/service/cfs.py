@@ -821,7 +821,7 @@ class CFSImageConfigurationSession:
                 for container_status in chain(
                     self.pod.status.init_container_statuses,
                     self.pod.status.container_statuses,
-                )
+                ) if container_status is not None
             )
         status_width = max(len(status) for status in [
                 self.CONTAINER_RUNNING_VALUE,
@@ -860,7 +860,16 @@ class CFSImageConfigurationSession:
         # Update both init_container_status_by_name and container_status_by_name
         for prefix in ('init_', ''):
             status_by_name = getattr(self, f'{prefix}container_status_by_name')
-            for container_status in getattr(self.pod.status, f'{prefix}container_statuses'):
+            container_statuses = getattr(self.pod.status, f'{prefix}container_statuses')
+            if container_statuses is None:
+                state_log_msgs.append(f'Waiting for container statuses in pod: {prefix}container_statuses is None.')
+                break
+
+            for container_status in container_statuses:
+                if container_status is None:
+                    LOGGER.debug(f'Found a None container in {prefix}container_status')
+                    continue
+
                 container_name = container_status.name
 
                 status = self.get_container_status_description(container_status)
