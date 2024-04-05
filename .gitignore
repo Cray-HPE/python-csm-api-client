@@ -18,6 +18,3 @@ venv
 nosetests.xml
 .coverage
 
-# Don't commit the lock file, we want to allow flexibility for other downstream
-# products
-poetry.lock
