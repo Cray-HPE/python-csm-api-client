@@ -25,6 +25,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.4] - 2024-04-25
+
+### Fixed
+- Relax the constraint on the version of the `kubernetes` package to allow this
+  library to be used by different versions of sat that require different
+  versions of Kubernetes matching the versions included in CSM.
+
 ## [1.2.3] - 2024-04-05
 
 ### Fixed
