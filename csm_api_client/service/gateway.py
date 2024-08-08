@@ -1,7 +1,7 @@
 #
 # MIT License
 #
-# (C) Copyright 2019-2023 Hewlett Packard Enterprise Development LP
+# (C) Copyright 2019-2024 Hewlett Packard Enterprise Development LP
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -149,8 +149,13 @@ class APIGatewayClient:
                 raise_not_ok is True, or request raises a RequestException of any
                 kind.
         """
-        url = urlunparse(('https', self.session.host, 'apis/{}{}'.format(
-            self.base_resource_path, '/'.join(args)), '', '', ''))
+        # Remove any leading or trailing '/' on base_resource_path to avoid duplicate '/' in URL
+        stripped_base = self.base_resource_path.strip('/')
+        if stripped_base:
+            path = '/'.join(('apis', self.base_resource_path.strip('/')) + args)
+        else:
+            path = '/'.join(('apis',) + args)
+        url = urlunparse(('https', self.session.host, path , '', '', ''))
 
         LOGGER.debug("Issuing %s request to URL '%s'", req_type, url)
 

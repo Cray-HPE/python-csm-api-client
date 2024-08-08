@@ -25,6 +25,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2024-08-08
+
+### Changed
+- Changed the `APIGatewayClient` handling of `base_resource_path` so that it is
+  possible to make a request on the `base_resource_path` without a trailing `/`.
+  This is required to allow the `CFSClient` to do a GET on the endpoint
+  `/cfs/v2`, which returns the semantic version of CFS. If any users of this
+  class were expecting calls to `_make_req` (or `get`, `put`, etc.) without
+  arguments to make a request to `base_resource_path` with a trailing slash,
+  they must be updated to pass an empty string argument. No such instances are
+  known in either the `sat` or `cfs-config-util` users of this library.
+
 ## [1.2.4] - 2024-04-25
 
 ### Fixed
