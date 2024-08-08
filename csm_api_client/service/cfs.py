@@ -27,6 +27,7 @@ Basic client library for CFS.
 import os.path
 from datetime import datetime, timedelta
 from enum import Enum
+from functools import cached_property
 from itertools import chain
 import json
 import logging
@@ -43,7 +44,6 @@ from urllib.parse import urlparse, urlunparse
 import uuid
 
 from cray_product_catalog.query import ProductCatalog, ProductCatalogError
-
 # ApiException is not found in the kubernetes.client library
 from kubernetes.client import (
     ApiException,
@@ -51,6 +51,7 @@ from kubernetes.client import (
     V1ContainerStatus,
     V1Pod,
 )
+from semver import VersionInfo
 
 from csm_api_client.service.gateway import APIError, APIGatewayClient
 from csm_api_client.service.hsm import HSMClient
@@ -982,6 +983,51 @@ class CFSClient(APIGatewayClient):
 
         return '-'.join([prefix, uuid_str])
 
+    def get_api_version(self) -> Optional[VersionInfo]:
+        """Get the API version from the CFS API.
+
+        Returns:
+            The version returned by the CFS API or None if the CFS API does not
+            support the version endpoint and returned a 404.
+
+        Raises:
+            APIError: if there is an issue getting the API version, other
+                than this endpoint not being supported, in which case, the method
+                returns None.
+        """
+        # A call to get without args will just do a GET to the base_resource_path,
+        # which returns the CFS semantic version.
+        response = self.get(raise_not_ok=False)
+        if not response.ok:
+            if response.status_code == 404:
+                # Versions of the CFS API prior to 1.12.0 did not provide this endpoint
+                return None
+            else:
+                self.raise_from_response(response)
+
+        try:
+            version_dict = response.json()
+        except ValueError as err:
+            raise APIError(f'Failed to parse JSON in response from CFS when getting '
+                           f'API version: {err}')
+
+        try:
+            return VersionInfo(version_dict['major'], version_dict['minor'], version_dict['patch'])
+        except ValueError:
+            raise APIError(f'CFS API returned invalid semantic version data: {version_dict}')
+        except KeyError as err:
+            raise APIError(f'CFS API returned invalid version dict with missing key {err}:'
+                           f'{version_dict}')
+
+    @cached_property
+    def supports_customized_image_name(self) -> bool:
+        """Whether the version of CFS API supports specifying the name of the customized image"""
+        api_version = self.get_api_version()
+        if api_version is None:
+            return False
+        else:
+            return api_version >= VersionInfo(1, 12, 0)
+
     def put_configuration(self, config_name: str, request_body: Dict) -> None:
         """Create a new configuration or update an existing configuration
 
@@ -1024,13 +1070,15 @@ k
             target_groups: the group names to target. Each group
                 name specified here will be defined to point at the IMS image
                 specified by `image_id`.
-            image_name: the name of the image being created, used just
-                for logging purposes
+            image_name: the name of the image to create. If the version of the
+                CFS API supports naming the customized image, then this will be
+                the name of the resulting image. If not, then the name is just
+                used during logging, but the actual name will differ.
 
         Returns:
             The created session
         """
-        request_body = {
+        request_body: Dict = {
             'name': session_name,
             'configurationName': config_name,
             'target': {
@@ -1041,6 +1089,12 @@ k
                 ]
             }
         }
+
+        if self.supports_customized_image_name:
+            request_body['target']['image_map'] = [
+                {'source_id': image_id, 'result_name': image_name}
+            ]
+
         try:
             created_session = self.post('sessions', json=request_body).json()
         except APIError as err:

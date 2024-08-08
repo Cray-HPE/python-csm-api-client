@@ -27,6 +27,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.0.0] - 2024-08-08
 
+### Added
+- Added `get_api_version` method to `CFSClient` that queries the CFS API for the
+  current API version.
+- Added `supports_customized_image_name` property to `CFSClient` that checks
+  whether the CFS version supports specifying the resultant image name for
+  image customization sessions.
+- Added use of the CFS API `image_map` parameter when creating CFS image
+  customization sessions in the `create_image_customization_session` method of
+  the `CFSClient` if the CFS version supports it. This passes the desired name
+  of the customized image to the CFS session.
+
 ### Changed
 - Changed the `APIGatewayClient` handling of `base_resource_path` so that it is
   possible to make a request on the `base_resource_path` without a trailing `/`.
