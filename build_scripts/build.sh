@@ -2,7 +2,7 @@
 #
 # MIT License
 #
-# (C) Copyright 2022-2023 Hewlett Packard Enterprise Development LP
+# (C) Copyright 2022-2024 Hewlett Packard Enterprise Development LP
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -36,7 +36,7 @@ function in_venv() {
 
 function prep() {
     in_venv pip install -U pip setuptools
-    in_venv pip install "poetry==1.5.1"
+    in_venv pip install "poetry==1.8.3"
     in_venv poetry install
 }
 
