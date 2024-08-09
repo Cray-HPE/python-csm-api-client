@@ -1,7 +1,7 @@
 #
 # MIT License
 #
-# (C) Copyright 2019-2023 Hewlett Packard Enterprise Development LP
+# (C) Copyright 2019-2024 Hewlett Packard Enterprise Development LP
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -44,12 +44,55 @@ class TestAPIGatewayClient(unittest.TestCase):
         self.api_gw_host = 'my-api-gw'
         self.mock_session = mock.MagicMock(autospec=Session, host=self.api_gw_host)
 
+        # Create a test API client class that sets the base_resource_path
+        class TSTClient(APIGatewayClient):
+            base_resource_path = 'tst/v2'
+        self.tst_client_cls = TSTClient
+
     def test_setting_timeout_with_constructor(self):
         """Test setting the API client timeout with the constructor argument."""
         for timeout in range(10, 60, 10):
             with self.subTest(timeout=timeout):
                 client = APIGatewayClient(self.mock_session, timeout=timeout)
                 self.assertEqual(client.timeout, timeout)
+
+    def test_make_req_base_resource_path(self):
+        """Test that _make_req with no path makes a request on the base_resource_path"""
+        client = self.tst_client_cls(self.mock_session)
+        client._make_req(req_type='GET')
+        self.mock_session.session.get.assert_called_once_with(
+            get_http_url_prefix(self.api_gw_host) + 'tst/v2',
+            params=None, timeout=None
+        )
+
+    def test_make_req_base_resource_path_with_path(self):
+        """Test that _make_req with a 1-element path requests on the join of path and base_resource_path"""
+        client = self.tst_client_cls(self.mock_session)
+        client._make_req('characters', req_type='GET')
+        self.mock_session.session.get.assert_called_once_with(
+            get_http_url_prefix(self.api_gw_host) + 'tst/v2/characters',
+            params=None, timeout=None
+        )
+
+    def test_make_req_base_resource_path_with_multi_path(self):
+        """Test that _make_req with a 2-element path requests on the join of path and base_resource_path"""
+        client = self.tst_client_cls(self.mock_session)
+        client._make_req('characters', 'thing1', req_type='GET')
+        self.mock_session.session.get.assert_called_once_with(
+            get_http_url_prefix(self.api_gw_host) + 'tst/v2/characters/thing1',
+            params=None, timeout=None
+        )
+
+    def test_make_req_base_resource_path_trailing_slash_removed(self):
+        """Test _make_req on a class that has a trailing slash in base_resource_path"""
+        class TSTClient(APIGatewayClient):
+            base_resource_path = 'tst/v2/'
+        client = TSTClient(self.mock_session)
+        client._make_req(req_type='GET')
+        self.mock_session.session.get.assert_called_once_with(
+            get_http_url_prefix(self.api_gw_host) + 'tst/v2',
+            params=None, timeout=None
+        )
 
     def test_get_no_params(self):
         """Test get method with no additional params."""
