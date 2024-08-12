@@ -25,6 +25,7 @@
 Client for querying the API gateway.
 """
 from functools import wraps
+from oauthlib.oauth2 import InvalidGrantError
 import logging
 import requests
 from typing import (
@@ -177,6 +178,11 @@ class APIGatewayClient:
             else:
                 # Internal error not expected to occur.
                 raise ValueError("Request type '{}' is invalid.".format(req_type))
+        # Handle invalid_grant error specifically
+        except InvalidGrantError as err:
+            raise APIError(
+                "Invalid grant error: The token is not active or is invalid. "
+                "Please re-authenticate using 'sat auth' to obtain a new token") from err
         except requests.exceptions.ReadTimeout as err:
             if req_type == 'STREAM':
                 raise ReadTimeout("{} request to URL '{}' timeout: {}".format(req_type, url, err))
