@@ -25,6 +25,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2024-09-04
+
+### Added
+- Added support for CFS v3 while retaining support for CFS v2. The existing
+  unversioned classes `CFSClient`, `CFSConfiguration`, and
+  `CFSConfigurationLayer` are now aliases for the `CFSV2Client`,
+  `CFSV2Configuration`, and `CFSV2ConfigurationLayer` classes. New classes
+  prefixed with `CFSV3` are added for CFS V3.
+- Added support for creating CFS configurations with the `additional_inventory`
+  property.
+- Added support for creating CFS configuration layers with the
+  `ims_require_dkms` special parameter.
+
+### Fixed
+- When loading a CFS configuration into the appropriate `CFSV2Configuration` or
+  `CFSV3Configuration` class, all properties known to CFS should now be retained
+  when it is modified and saved back into CFS via the CFS API. Formerly, the
+  `additional_inventory` of a CFS configuration and the `ims_require_dkms`
+  property would have been dropped by this library.
+
 ## [2.1.2] - 2024-09-04
 
 ### Fixed
