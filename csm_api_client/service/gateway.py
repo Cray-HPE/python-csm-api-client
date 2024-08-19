@@ -126,6 +126,7 @@ class APIGatewayClient:
         *args: str,
         req_type: str = 'GET',
         req_param: Optional[Dict] = None,
+        req_body: Optional[Dict] = None,
         json: Dict = None,
         raise_not_ok: bool = True,
     ) -> Response:
@@ -133,10 +134,11 @@ class APIGatewayClient:
         Args:
             *args: Variable length list of path components used to construct
                 the path to the resource.
-            req_type: Type of reqest (GET, STREAM, POST, PUT, or DELETE).
-            req_param: Parameter(s) depending on request type.
+            req_type: Type of request (GET, STREAM, POST, PUT, or DELETE).
+            req_param: request parameters
+            req_body: request body
             json: The data dict to encode as JSON and pass as the body of
-                a POST request.
+                a POST, PUT, or PATCH request.
             raise_not_ok: If True and the response code is >=400, raise
                 an APIError. If False, return the response object.
 
@@ -167,11 +169,11 @@ class APIGatewayClient:
             elif req_type == 'STREAM':
                 r = requester.get(url, params=req_param, stream=True, timeout=self.timeout)
             elif req_type == 'POST':
-                r = requester.post(url, data=req_param, json=json, timeout=self.timeout)
+                r = requester.post(url, data=req_body, params=req_param, json=json, timeout=self.timeout)
             elif req_type == 'PUT':
-                r = requester.put(url, data=req_param, json=json, timeout=self.timeout)
+                r = requester.put(url, data=req_body, params=req_param, json=json, timeout=self.timeout)
             elif req_type == 'PATCH':
-                r = requester.patch(url, data=req_param, json=json, timeout=self.timeout)
+                r = requester.patch(url, data=req_body, params=req_param, json=json, timeout=self.timeout)
             elif req_type == 'DELETE':
                 r = requester.delete(url, timeout=self.timeout)
             else:
@@ -251,7 +253,7 @@ class APIGatewayClient:
                 raises a RequestException of any kind.
         """
 
-        r = self._make_req(*args, req_type='POST', req_param=payload, json=json, **kwargs)
+        r = self._make_req(*args, req_type='POST', req_body=payload, json=json, **kwargs)
 
         return r
 
@@ -272,7 +274,7 @@ class APIGatewayClient:
                 raises a RequestException of any kind.
         """
 
-        r = self._make_req(*args, req_type='PUT', req_param=payload, json=json, **kwargs)
+        r = self._make_req(*args, req_type='PUT', req_body=payload, json=json, **kwargs)
 
         return r
 
@@ -293,7 +295,7 @@ class APIGatewayClient:
                 raises a RequestException of any kind.
         """
 
-        r = self._make_req(*args, req_type='PATCH', req_param=payload, json=json, **kwargs)
+        r = self._make_req(*args, req_type='PATCH', req_body=payload, json=json, **kwargs)
 
         return r
 

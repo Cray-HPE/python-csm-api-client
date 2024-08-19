@@ -25,6 +25,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.2] - 2024-09-04
+
+### Fixed
+- Fixed how `put`, `patch`, and `post` methods of `APIGatewayClient` class pass
+  their request bodies and request parameters, so that they can use both. To
+  call one of these methods with request parameters, use the `req_param` keyword
+  argument.
+
 ## [2.1.1] - 2024-09-04
 
 ### Fixed
