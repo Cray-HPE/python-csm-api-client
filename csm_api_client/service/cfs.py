@@ -61,6 +61,7 @@ from semver import VersionInfo
 from csm_api_client.service.gateway import APIError, APIGatewayClient
 from csm_api_client.service.hsm import HSMClient
 from csm_api_client.service.vcs import VCSError, VCSRepo
+from csm_api_client.session import Session
 from csm_api_client.util import get_val_by_path, pop_val_by_path, set_val_by_path, strip_suffix
 
 LOGGER = logging.getLogger(__name__)
@@ -1332,8 +1333,7 @@ class CFSClientBase(APIGatewayClient, ABC):
             The details of the newly updated or created session
         """
         try:
-            return self.put('configurations', config_name, json=request_body,
-                            req_param=request_params).json()
+            return self.put('configurations', config_name, json=request_body, req_param=request_params).json()
         except APIError as err:
             raise APIError(f'Failed to update CFS configuration {config_name}: {err}')
         except ValueError as err:
@@ -1527,6 +1527,33 @@ class CFSClientBase(APIGatewayClient, ABC):
         else:
             LOGGER.warning(f'No property changes were requested during update '
                            f'of CFS component with id {component_id}.')
+
+    @staticmethod
+    def get_cfs_client(session: Session, version: str, **kwargs: Any) -> 'CFSClientBase':
+        """Instantiate a CFSVxClient for the given API version.
+
+        Args:
+            session (csm_api_client.Session): session object to pass through to the client
+            version (Optional[str]): 'v2' or 'v3'
+
+        Additional kwargs are passed through to the underlying CFSVxClient
+        constructor.
+
+        Returns:
+            An instance of a subclass of `CFSClientBase`.
+
+        Raises:
+            ValueError: if the given version string is not valid
+        """
+        cfs_client_cls = {
+            'v2': CFSV2Client,
+            'v3': CFSV3Client,
+        }.get(version)
+
+        if cfs_client_cls is None:
+            raise ValueError(f'Invalid CFS API version "{version}"')
+
+        return cfs_client_cls(session, **kwargs)
 
 
 class CFSV2Client(CFSClientBase):

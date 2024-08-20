@@ -36,7 +36,7 @@ from unittest.mock import Mock, call, patch, MagicMock
 from cray_product_catalog.query import ProductCatalogError
 
 from csm_api_client.service.cfs import (
-    CFSClient,
+    CFSClientBase,
     CFSV2Client,
     CFSV3Client,
     CFSV2Configuration,
@@ -1113,8 +1113,7 @@ class MockFile(io.StringIO):
 class TestCFSV2Configuration(unittest.TestCase):
     """Tests for the CFSV2Configuration class."""
     def setUp(self):
-        self.mock_cfs_client_cls = patch('csm_api_client.service.cfs.CFSClient').start()
-        self.mock_cfs_client = self.mock_cfs_client_cls.return_value
+        self.mock_cfs_client = Mock(spec=CFSV2Client)
 
         self.example_layer_data = {
             "cloneUrl": "https://api-gw-service-nmn.local/vcs/cray/example-config-management.git",
@@ -1477,8 +1476,7 @@ class TestCFSV3Configuration(unittest.TestCase):
     """
 
     def setUp(self):
-        self.mock_cfs_client_cls = patch('csm_api_client.service.cfs.CFSV3Client').start()
-        self.mock_cfs_client = self.mock_cfs_client_cls.return_value
+        self.mock_cfs_client = Mock(spec=CFSV3Client)
         self.mock_get_json = self.mock_cfs_client.get.return_value.json
 
         self.example_layer_data = {
@@ -1516,9 +1514,6 @@ class TestCFSV3Configuration(unittest.TestCase):
         }
         self.multiple_layer_config = CFSV3Configuration(self.mock_cfs_client,
                                                         self.multiple_layer_config_data)
-
-    def tearDown(self):
-        patch.stopall()
 
     @staticmethod
     def get_put_configuration_call(config_name, layers):
@@ -1593,7 +1588,7 @@ class TestCFSUpdateContainerStatus(unittest.TestCase):
         self.session_name = 'test_session'
         self.image_name = 'test_image'
         self.session = CFSImageConfigurationSession({'name': self.session_name},
-                                                    MagicMock(spec=CFSClient),
+                                                    MagicMock(spec=CFSV2Client),
                                                     self.image_name)
 
         # Mock out a single init_container_status element
@@ -1686,8 +1681,34 @@ class TestCFSUpdateContainerStatus(unittest.TestCase):
                               logs_cm.records[0].message)
 
 
+class TestCFSClientBase(unittest.TestCase):
+    """Tests for the CFSClientBase class."""
+
+    def setUp(self):
+        self.mock_session = Mock()
+        self.mock_cfs_v2_client = patch('csm_api_client.service.cfs.CFSV2Client').start()
+        self.mock_cfs_v3_client = patch('csm_api_client.service.cfs.CFSV3Client').start()
+
+    def tearDown(self):
+        patch.stopall()
+
+    def test_get_client_v2(self):
+        """Test get_client with version 2"""
+        cfs_client = CFSClientBase.get_cfs_client(self.mock_session, 'v2')
+        self.assertEqual(cfs_client, self.mock_cfs_v2_client.return_value)
+
+    def test_get_client_v3(self):
+        """Test get_client with version 3"""
+        cfs_client = CFSClientBase.get_cfs_client(self.mock_session, 'v3')
+        self.assertEqual(cfs_client, self.mock_cfs_v3_client.return_value)
+
+    def test_get_client_invalid_version(self):
+        """Test get_client with an invalid version"""
+        with self.assertRaisesRegex(ValueError, 'Invalid CFS API version'):
+            CFSClientBase.get_cfs_client(self.mock_session, 'v4')
+
 class TestCFSV2Client(unittest.TestCase):
-    """Tests for the CFSClient class"""
+    """Tests for the CFSV2Client class"""
 
     @staticmethod
     def get_fake_components(component_ids: List[str]) -> List[dict]:

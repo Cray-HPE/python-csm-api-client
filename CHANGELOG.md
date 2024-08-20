@@ -61,7 +61,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.1.0] - 2024-08-09
 
 ### Fixed
-- Updating the `cray-product-catalog` to latest version that handles the split Kubernetes ConfigMap.
+- Updating the `cray-product-catalog` to latest version that handles the split
+  Kubernetes ConfigMap.
 
 ## [2.0.0] - 2024-08-08
 
