@@ -137,7 +137,7 @@ class TestAPIGatewayClient(unittest.TestCase):
 
         self.mock_session.session.post.assert_called_once_with(
             get_http_url_prefix(self.api_gw_host) + '/'.join(path_components),
-            data=payload, json=None, timeout=60
+            data=payload, json=None, timeout=60, params=None
         )
         self.assertEqual(response, self.mock_session.session.post.return_value)
 
@@ -159,7 +159,20 @@ class TestAPIGatewayClient(unittest.TestCase):
 
         self.mock_session.session.put.assert_called_once_with(
             get_http_url_prefix(self.api_gw_host) + '/'.join(path_components),
-            data=payload, json=None, timeout=60
+            data=payload, json=None, timeout=60, params=None
+        )
+
+    def test_put_with_params(self):
+        """Test put method with additional params."""
+        client = APIGatewayClient(self.mock_session, timeout=60)
+        path_components = ['People']
+        params = {'name': 'ryan'}
+        payload = {}
+        client.put(*path_components, payload=payload, req_param=params)
+
+        self.mock_session.session.put.assert_called_once_with(
+            get_http_url_prefix(self.api_gw_host) + '/'.join(path_components),
+            data=payload, json=None, timeout=60, params=params
         )
 
     def test_put_exception(self):
@@ -180,7 +193,7 @@ class TestAPIGatewayClient(unittest.TestCase):
 
         self.mock_session.session.patch.assert_called_once_with(
             get_http_url_prefix(self.api_gw_host) + '/'.join(path_components),
-            data=payload, json=None, timeout=60
+            data=payload, json=None, timeout=60, params=None
         )
 
     def test_patch_json(self):
@@ -192,7 +205,7 @@ class TestAPIGatewayClient(unittest.TestCase):
 
         self.mock_session.session.patch.assert_called_once_with(
             get_http_url_prefix(self.api_gw_host) + '/'.join(path_components),
-            data=None, json=json_payload, timeout=60
+            data=None, json=json_payload, timeout=60, params=None
         )
 
     def test_patch_exception(self):

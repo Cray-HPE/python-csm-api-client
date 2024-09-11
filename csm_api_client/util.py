@@ -1,7 +1,7 @@
 #
 # MIT License
 #
-# (C) Copyright 2019-2022 Hewlett Packard Enterprise Development LP
+# (C) Copyright 2019-2022, 2024 Hewlett Packard Enterprise Development LP
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -75,6 +75,44 @@ def get_val_by_path(
     return current_val
 
 
+# Add a function called pop_val_by_path that removes a dotted path value from a dictionary
+def pop_val_by_path(dict_val: dict, dotted_path: str, default_value: Optional[Any] = None) -> Any:
+    """Remove a value from a dictionary using a dotted path.
+
+    For example, if `dict_val` is as follows:
+
+        dict_val = {
+            'price_is_right': {
+                'host': 'Bob Barker'
+            }
+        }
+
+    Then the following call:
+
+        pop_val_by_path(dict_val, 'price_is_right.host')
+
+    Would return 'Bob Barker' and result in this dictionary:
+
+        dict_val = {
+            'price_is_right': {}
+        }
+
+    The dictionary `dict_val` is modified in place.
+    """
+    if not dotted_path:
+        raise ValueError('pop_val_by_path requires a non-empty path')
+
+    split_path = dotted_path.split('.')
+
+    for key in split_path[:-1]:
+        if not isinstance(dict_val.get(key), dict):
+            return default_value
+        dict_val = dict_val[key]
+
+    # The final key is all that remains, so pop the key
+    return dict_val.pop(split_path[-1], default_value)
+
+
 def set_val_by_path(dict_val: dict, dotted_path: str, value: Any) -> None:
     """Set a value in a dictionary using a dotted path.
 
@@ -133,3 +171,17 @@ def set_val_by_path(dict_val: dict, dotted_path: str, value: Any) -> None:
         dict_val = dict_val[key]
 
     dict_val[split_path[-1]] = value
+
+
+def strip_suffix(s: str, suffix: str) -> str:
+    """Remove a suffix from a string if it exists.
+
+    Args:
+        s: The string to remove the suffix from.
+        suffix: The suffix to remove from the string.
+    """
+    if not suffix:
+        return s
+    if s.endswith(suffix):
+        return s[:-len(suffix)]
+    return s

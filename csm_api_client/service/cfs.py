@@ -24,7 +24,9 @@
 """
 Basic client library for CFS.
 """
+from abc import ABC, abstractmethod
 import os.path
+from copy import deepcopy
 from datetime import datetime, timedelta
 from enum import Enum
 from functools import cached_property
@@ -34,10 +36,13 @@ import logging
 import re
 import shutil
 from typing import (
+    Any,
     Dict,
+    Generator,
     Iterable,
     List,
     Optional,
+    Type,
     Union
 )
 from urllib.parse import urlparse, urlunparse
@@ -56,7 +61,8 @@ from semver import VersionInfo
 from csm_api_client.service.gateway import APIError, APIGatewayClient
 from csm_api_client.service.hsm import HSMClient
 from csm_api_client.service.vcs import VCSError, VCSRepo
-from csm_api_client.util import get_val_by_path
+from csm_api_client.session import Session
+from csm_api_client.util import get_val_by_path, pop_val_by_path, set_val_by_path, strip_suffix
 
 LOGGER = logging.getLogger(__name__)
 MAX_BRANCH_NAME_WIDTH = 7
@@ -81,69 +87,125 @@ class CFSConfigurationError(Exception):
     """Represents an error that occurred while modifying CFS."""
 
 
-class CFSConfigurationLayer:
-    """A layer in a CFS configuration."""
+class CFSLayerBase(ABC):
+    """A common base for layers in a CFS configuration.
 
-    # A mapping from the properties in CFS response data to attributes of this class
-    CFS_PROPS_TO_ATTRS = {
-        'cloneUrl': 'clone_url',
+    This is an abstract base class not specific to any version of CFS. It must
+    be subclassed to support either CFS v2 or CFS v3. It includes common
+    functionality for both versions of CFS.
+
+    This class is the parent class for both the layers and the additional
+    inventory that can be included in a CFS configuration.
+    """
+
+    # Default mapping from CFS properties to attributes of this class
+    CFS_PROPS_TO_ATTRS: Dict[str, str] = {
         'commit': 'commit',
         'branch': 'branch',
         'name': 'name',
-        'playbook': 'playbook'
     }
-    ATTRS_TO_CFS_PROPS = {val: key for key, val in CFS_PROPS_TO_ATTRS.items()}
+    # This gets automatically overwritten in the __init_subclass__ method. It is
+    # the reverse mapping from attributes of the class to CFS properties.
+    ATTRS_TO_CFS_PROPS: Dict[str, str] = {value: key for key, value in CFS_PROPS_TO_ATTRS.items()}
+    # These are the attributes that must match for a layer to be considered the same
+    # as another layer (apart from the version). Subclasses can add to or override this.
+    MATCHING_ATTRS = ['repo_path']
 
-    def __init__(self, clone_url: str,
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        """Sets up class attribute mapping from attributes to CFS properties"""
+        super().__init_subclass__(**kwargs)
+        # Create the reverse mapping from attributes to CFS properties automatically
+        cls.ATTRS_TO_CFS_PROPS = {val: key for key, val in cls.CFS_PROPS_TO_ATTRS.items()}
+
+    def __init__(self,
+                 clone_url: Optional[str] = None,
                  name: Optional[str] = None,
-                 playbook: Optional[str] = None,
                  commit: Optional[str] = None,
-                 branch: Optional[str] = None) -> None:
-        """Create a new CFSConfiguration.
+                 branch: Optional[str] = None,
+                 additional_data: Optional[dict] = None) -> None:
+        """Create a new layer.
 
         Args:
             clone_url: the git repository clone URL
-            name (str, optional): the name of the CFS configuration layer. The
+            name: the name of the CFS configuration layer. The
                 name is optional.
-            playbook: the name of the Ansible playbook. If
-                omitted, the CFS-internal default is used.
             commit: the commit hash to use. Either `commit` or
                 `branch` is required.
             branch: the git branch to use. Either `commit` or
                 `branch` is required.
+            additional_data: any extra data included in a layer that is not
+                explicitly understood by this class.
 
         Raises:
             ValueError: if neither `commit` nor `branch` is specified.
         """
         self.clone_url = clone_url
-        self.name = name
-        self.playbook = playbook
+        self._name = name
         if not (commit or branch):
             raise ValueError('Either commit or branch is required to create '
-                             'a CFSConfigurationLayer.')
+                             'a CFS configuration layer.')
         self.commit = commit
         self.branch = branch
+        self.additional_data = additional_data or {}
+
+    @property
+    def name(self) -> str:
+        """the name of the CFS configuration layer"""
+        if self._name is not None:
+            return self._name
+
+        branch_or_commit = self.branch or self.commit
+        # This shouldn't happen given that __init__ checks that one is specified,
+        # but program defensively and satisfy mypy type-checking.
+        if not branch_or_commit:
+            branch_or_commit = 'default'
+
+        name_components = [
+            self.repo_short_name,
+            branch_or_commit[:MAX_BRANCH_NAME_WIDTH],
+            datetime.now().strftime('%Y%m%dT%H%M%S')
+        ]
+        return '-'.join(name_components)
 
     @property
     def repo_path(self) -> str:
         """the path portion of the clone URL, e.g. /vcs/cray/sat-config-management.git"""
-        return urlparse(self.clone_url).path
+        if self.clone_url:
+            return urlparse(self.clone_url).path
+        else:
+            return ''
 
-    def matches(self, other_layer: 'CFSConfigurationLayer') -> bool:
-        """Determine whether this layer matches the given layer.
+    @property
+    def repo_short_name(self) -> str:
+        """a shortened version of the repo name, e.g. 'sat-config-management' becomes 'sat'"""
+        repo_name = os.path.basename(self.repo_path)
+        # Strip off the '.git' suffix then strip off '-config-management' if present
+        return strip_suffix(strip_suffix(repo_name, '.git'), '-config-management')
+
+    def matches(self, other_layer: 'CFSLayerBase') -> bool:
+        """Determine whether this layer matches another layer.
+
+        A layer matches if it has the same content, but perhaps at a different
+        version. This is useful for identifying which layers in a configuration
+        must be updated when updating the version of a product used in a CFS
+        configuration.
 
         Args:
-            other_layer: the layer data
+            other_layer: the other layer to compare
 
         Returns:
-            True if the layer matches, False otherwise.
+            True if the layers match, False otherwise.
         """
-        if not(isinstance(other_layer, CFSConfigurationLayer)):
+        # Layers must be of the same exact type to match. This means they must
+        # both be additional inventory layers or configuration layers, and they
+        # must be using the same version of CFS.
+        if type(self) is not type(other_layer):
             return False
 
-        return self.repo_path == other_layer.repo_path and self.playbook == other_layer.playbook
+        return all(getattr(self, attr) == getattr(other_layer, attr)
+                   for attr in self.MATCHING_ATTRS)
 
-    def get_updated_values(self, new_layer: 'CFSConfigurationLayer') -> Dict:
+    def get_updated_values(self, new_layer: 'CFSLayerBase') -> Dict:
         """Get the values which have been updated by the new version of this layer.
 
         Args:
@@ -164,6 +226,11 @@ class CFSConfigurationLayer:
     def resolve_branch_to_commit_hash(self) -> None:
         """Resolve a branch to a commit hash and specify only the commit hash.
 
+        CFS v3 can emulate this behavior in which branch names are resolved to
+        commit hashes and only the commit hash is stored in the configuration
+        if the 'drop_branches' request parameter is used when creating/updating
+        the configuration.
+
         Returns:
             None. Modifies `self.branch` and `self.commit`.
 
@@ -174,6 +241,12 @@ class CFSConfigurationLayer:
         if not self.branch:
             # No branch to translate to commit
             return
+
+        if self.clone_url is None:
+            # This should only be the case if this is called in CFS v3 for a layer
+            # that specifies a "source" instead of a "clone_url"
+            raise CFSConfigurationError(f'Cannot resolve branch {self.branch} to commit hash '
+                                        'because clone URL is not specified.')
 
         vcs_repo = VCSRepo(self.clone_url)
         if self.commit:
@@ -200,54 +273,64 @@ class CFSConfigurationLayer:
         Returns:
             the data for this layer in the format expected by the CFS API
         """
-        req_payload = {}
+        # Add the additional data to the payload first
+        req_payload = {**self.additional_data}
         for cfs_prop, attr in self.CFS_PROPS_TO_ATTRS.items():
             value = getattr(self, attr, None)
             if value:
-                req_payload[cfs_prop] = value
+                set_val_by_path(req_payload, cfs_prop, value)
         return req_payload
 
     def __str__(self) -> str:
-        return (f'layer with repo path {self.repo_path} and '
-                f'{f"playbook {self.playbook}" if self.playbook else "default playbook"}')
+        return f'{self.__class__.__name__} with repo path {self.repo_path}'
 
-    @staticmethod
-    def construct_name(product_or_repo: str,
-                       playbook: Optional[str] = None,
+    @classmethod
+    def from_clone_url(cls, clone_url: str,
+                       name: Optional[str] = None,
                        commit: Optional[str] = None,
-                       branch: Optional[str] = None) -> str:
-        """Construct a name for the layer following a naming convention.
+                       branch: Optional[str] = None,
+                       **kwargs: Any) -> 'CFSLayerBase':
+        """Create a new CFSConfigurationLayer from an explicit clone URL.
+
+        This method is deprecated and preserved for backwards compatibility. Use
+        the constructor directly instead.
 
         Args:
-            product_or_repo: the name of the product or repository
-            playbook: the name of the playbook
-            commit: the commit hash
-            branch: the name of the branch. If both commit and branch
-                are specified, branch is used in the name.
+            clone_url: the git repository clone URL
+            name: an optional name override
+            commit: an optional commit override
+            branch: an optional branch override
+            **kwargs: additional arguments to pass along to __init__
 
         Returns:
-            the constructed layer name
+            the layer constructed from the clone URL
         """
-        playbook_name = os.path.splitext(playbook)[0] if playbook else 'site'
-        branch_or_commit = branch or commit
-        if not branch_or_commit:
-            branch_or_commit = 'default'
+        return cls(clone_url=clone_url, name=name, commit=commit, branch=branch, **kwargs)
 
-        name_components = [
-            product_or_repo,
-            playbook_name,
-            branch_or_commit[:MAX_BRANCH_NAME_WIDTH],
-            datetime.now().strftime('%Y%m%dT%H%M%S')
-        ]
-        return '-'.join(name_components)
+    @classmethod
+    def from_cfs(cls, data: Dict) -> 'CFSLayerBase':
+        """Create a new CFSLayerBase from data in a response from CFS.
+
+        Args:
+            data: the data for the layer from CFS.
+
+        Returns:
+            the CFS configuration layer retrieved from CFS configuration data
+        """
+        data_copy = deepcopy(data)
+        kwargs = {
+            attr: pop_val_by_path(data_copy, cfs_prop)
+            for cfs_prop, attr in cls.CFS_PROPS_TO_ATTRS.items()
+        }
+        return cls(**kwargs, additional_data=data_copy)
 
     @classmethod
     def from_product_catalog(cls, product_name: str, api_gw_host: str,
                              product_version: Optional[str] = None,
-                             name: Optional[str] = None,
-                             playbook: Optional[str] = None,
                              commit: Optional[str] = None,
-                             branch: Optional[str] = None) -> 'CFSConfigurationLayer':
+                             branch: Optional[str] = None,
+                             product_catalog: Optional[ProductCatalog] = None,
+                             **kwargs: Any) -> 'CFSLayerBase':
         """Create a new CFSConfigurationLayer from product catalog data.
 
         Args:
@@ -255,10 +338,11 @@ class CFSConfigurationLayer:
             api_gw_host: the URL of the API gateway
             product_version: the version of the product in the
                 product catalog. If omitted, the latest version is used.
-            name: an optional name override
-            playbook: the name of the Ansible playbook
             commit: an optional commit override
             branch: an optional branch override
+            product_catalog: the product catalog to use. If omitted, the product
+                catalog is loaded from Kubernetes
+            **kwargs: additional keyword arguments to pass to the constructor
 
         Returns:
             the layer constructed from the product
@@ -273,108 +357,247 @@ class CFSConfigurationLayer:
             f'product {product_name}'
         )
 
+        if product_catalog is None:
+            try:
+                product_catalog = ProductCatalog()
+            except ProductCatalogError as err:
+                raise CFSConfigurationError(f'{fail_msg}: {err}')
+
         try:
-            product = ProductCatalog().get_product(product_name, product_version)
+            product = product_catalog.get_product(product_name, product_version)
         except ProductCatalogError as err:
             raise CFSConfigurationError(f'{fail_msg}: {err}')
 
         if not product.clone_url:
             raise CFSConfigurationError(f'{fail_msg}: {product} has no clone URL.')
-        else:
-            api_gw_parsed = urlparse(api_gw_host)
-            if api_gw_parsed.netloc:
-                api_gw_host = api_gw_parsed.netloc
 
-            clone_url = urlunparse(
-                urlparse(product.clone_url)._replace(
-                    netloc=api_gw_host
-                )
+        api_gw_parsed = urlparse(api_gw_host)
+        if api_gw_parsed.netloc:
+            api_gw_host = api_gw_parsed.netloc
+        clone_url = urlunparse(
+            urlparse(product.clone_url)._replace(
+                netloc=api_gw_host
             )
+        )
 
         if not (commit or branch):
             if not product.commit:
                 raise CFSConfigurationError(f'{fail_msg}: {product} has no commit hash.')
             commit = product.commit
 
-        if not name:
-            name = cls.construct_name(product_name, playbook=playbook,
-                                      commit=commit, branch=branch)
+        return cls(clone_url=clone_url, commit=commit, branch=branch, **kwargs)
 
-        return CFSConfigurationLayer(clone_url, name=name, playbook=playbook,
-                                     commit=commit, branch=branch)
 
-    @classmethod
-    def from_clone_url(cls, clone_url: str,
-                       name: Optional[str] = None,
-                       playbook: Optional[str] = None,
-                       commit: Optional[str] = None,
-                       branch: Optional[str] = None) -> 'CFSConfigurationLayer':
-        """Create a new CFSConfigurationLayer from an explicit clone URL.
+class CFSV2AdditionalInventoryLayer(CFSLayerBase):
+    """A layer of additional inventory in a CFS v2 configuration."""
+
+    CFS_PROPS_TO_ATTRS = CFSLayerBase.CFS_PROPS_TO_ATTRS.copy()
+    CFS_PROPS_TO_ATTRS['cloneUrl'] = 'clone_url'
+
+    def __init__(self, **kwargs: Any) -> None:
+        """Create a new CFSV2AdditionalInventoryLayer.
+
+        Raises:
+            ValueError: if clone_url is not specified, or branch or commit is
+                not specified
+        """
+        super().__init__(**kwargs)
+        if not self.clone_url:
+            raise ValueError('clone_url is required for layers in CFS v2')
+
+
+class CFSV3AdditionalInventoryLayer(CFSLayerBase):
+    """A layer of additional inventory in a CFS v3 configuration."""
+
+    CFS_PROPS_TO_ATTRS = CFSLayerBase.CFS_PROPS_TO_ATTRS.copy()
+    CFS_PROPS_TO_ATTRS['clone_url'] = 'clone_url'
+    CFS_PROPS_TO_ATTRS['source'] = 'source'
+    MATCHING_ATTRS = CFSLayerBase.MATCHING_ATTRS + ['source']
+
+    def __init__(self, source: str = None, **kwargs: Any) -> None:
+        """Create a new CFSV3AdditionalInventoryLayer.
 
         Args:
-            clone_url: the git repository clone URL
-            name: an optional name override
-            playbook: the name of the Ansible playbook
-            commit: an optional commit override
-            branch: an optional branch override
+            source: the name of the CFS source to use for the layer, if not
+                using clone_url
 
-        Returns:
-            the layer constructed from the product
+        Raises:
+            ValueError: if clone_url or source is not specified, or branch or
+                commit is not specified
         """
-        def strip_suffix(s: str, suffix: str) -> str:
-            if s.endswith(suffix):
-                return s[:-len(suffix)]
-            return s
+        super().__init__(**kwargs)
+        self.source = source
+        if not (self.source or self.clone_url):
+            raise ValueError('Either source or clone_url is required for layers in CFS v3')
 
-        if not name:
-            repo_name = os.path.basename(urlparse(clone_url).path)
-            # Strip off the '.git' suffix then strip off '-config-management' if present
-            short_repo_name = strip_suffix(strip_suffix(repo_name, '.git'), '-config-management')
-            name = cls.construct_name(short_repo_name, playbook=playbook,
-                                      commit=commit, branch=branch)
+    @property
+    def repo_short_name(self) -> str:
+        """a shortened version of the repo name, or the source name"""
+        if self.source:
+            return self.source
+        else:
+            return super().repo_short_name
 
-        return CFSConfigurationLayer(clone_url, name=name, playbook=playbook,
-                                     commit=commit, branch=branch)
+    def __str__(self) -> str:
+        if self.clone_url:
+            return f'{self.__class__.__name__} with repo path {self.repo_path}'
+        else:
+            return f'{self.__class__.__name__} with source {self.source}'
 
-    @classmethod
-    def from_cfs(cls, data: Dict) -> 'CFSConfigurationLayer':
-        """Create a new CFSConfigurationLayer from data in a response from CFS.
+
+class CFSV2ConfigurationLayer(CFSV2AdditionalInventoryLayer):
+    """A layer in a CFS v2 configuration"""
+
+    CFS_PROPS_TO_ATTRS = CFSV2AdditionalInventoryLayer.CFS_PROPS_TO_ATTRS.copy()
+    CFS_PROPS_TO_ATTRS['playbook'] = 'playbook'
+    CFS_PROPS_TO_ATTRS['specialParameters.imsRequireDkms'] = 'ims_require_dkms'
+    MATCHING_ATTRS = CFSV2AdditionalInventoryLayer.MATCHING_ATTRS + ['playbook', 'ims_require_dkms']
+
+    def __init__(self, playbook: str = None, ims_require_dkms: bool = None, **kwargs: Any) -> None:
+        """Create a new CFSV2ConfigurationLayer
+
+        Note that CFS v2 configuration layers do not require a playbook. If a
+        playbook is not specified, they use the globally configured default
+        playbook.
 
         Args:
-            data: the data for the layer from CFS.
+            playbook: the name of the playbook to use for the layer
+            ims_require_dkms: a special parameter for IMS that indicates whether
+                DKMS is required for the layer
+            **kwargs: additional arguments to pass to the constructor
 
-        Returns:
-            the CFS configuration layer retrieved from CFS configuration data
+        Raises:
+            ValueError: if clone_url is not specified, or branch or commit is
+                not specified
         """
-        clone_url = data['cloneUrl']
-        kwargs = {
-            attr: data.get(cfs_prop)
-            for cfs_prop, attr in cls.CFS_PROPS_TO_ATTRS.items()
-            if cfs_prop != 'cloneUrl'
-        }
-        return cls(clone_url, **kwargs)
+        super().__init__(**kwargs)
+        self.playbook = playbook
+        self.ims_require_dkms = ims_require_dkms
+
+    def __str__(self) -> str:
+        return (f'{self.__class__.__name__} with repo path {self.repo_path}'
+                f' and {f"playbook {self.playbook}" if self.playbook else "default playbook"}')
+
+    @property
+    def name(self) -> str:
+        """the name of the CFS configuration layer"""
+        if self._name is not None:
+            return self._name
+
+        if self.playbook is not None:
+            playbook_name = os.path.splitext(self.playbook)[0]
+        else:
+            playbook_name = 'site'
+
+        branch_or_commit = self.branch or self.commit
+        # This shouldn't happen given that __init__ checks that one is specified,
+        # but program defensively and satisfy mypy type-checking.
+        if not branch_or_commit:
+            branch_or_commit = 'default'
+
+        name_components = [
+            self.repo_short_name,
+            playbook_name,
+            branch_or_commit[:MAX_BRANCH_NAME_WIDTH],
+            datetime.now().strftime('%Y%m%dT%H%M%S')
+        ]
+        return '-'.join(name_components)
 
 
-class CFSConfiguration:
-    """Represents a single configuration in CFS."""
+# This preserves backwards-compatibility with earlier versions of this library
+# which did not distinguish between CFS API versions
+CFSConfigurationLayer = CFSV2ConfigurationLayer
 
-    def __init__(self, cfs_client: 'CFSClient', data: Dict) -> None:
+
+class CFSV3ConfigurationLayer(CFSV3AdditionalInventoryLayer):
+    """A layer in a CFS v3 configuration."""
+
+    CFS_PROPS_TO_ATTRS = CFSV3AdditionalInventoryLayer.CFS_PROPS_TO_ATTRS.copy()
+    CFS_PROPS_TO_ATTRS['playbook'] = 'playbook'
+    CFS_PROPS_TO_ATTRS['special_parameters.ims_require_dkms'] = 'ims_require_dkms'
+    MATCHING_ATTRS = CFSV3AdditionalInventoryLayer.MATCHING_ATTRS + ['playbook', 'ims_require_dkms']
+
+    def __init__(self, playbook: str, ims_require_dkms: bool = None, **kwargs: Any) -> None:
+        """Create a new CFSV3ConfigurationLayer.
+
+        Args:
+            playbook: the name of the playbook to use for the layer
+            ims_require_dkms: a special parameter for IMS that indicates whether
+                DKMS is required for the layer
+
+        Raises:
+            ValueError: if clone_url or source is not specified, or branch or
+                commit is not specified
+        """
+        super().__init__(**kwargs)
+        self.playbook = playbook
+        self.ims_require_dkms = ims_require_dkms
+
+    def __str__(self) -> str:
+        if self.clone_url:
+            desc = f'{self.__class__.__name__} with repo path {self.repo_path}'
+        else:
+            desc = f'{self.__class__.__name__} with source {self.source}'
+        return f'{desc} and playbook {self.playbook}'
+
+    @property
+    def name(self) -> str:
+        """the name of the CFS configuration layer"""
+        if self._name is not None:
+            return self._name
+
+        playbook_name = os.path.splitext(self.playbook)[0]
+        branch_or_commit = self.branch or self.commit
+        # This shouldn't happen given that __init__ checks that one is specified,
+        # but program defensively and satisfy mypy type-checking.
+        if not branch_or_commit:
+            branch_or_commit = 'default'
+
+        name_components = [
+            self.repo_short_name,
+            playbook_name,
+            branch_or_commit[:MAX_BRANCH_NAME_WIDTH],
+            datetime.now().strftime('%Y%m%dT%H%M%S')
+        ]
+        return '-'.join(name_components)
+
+
+class CFSConfigurationBase(ABC):
+    """Represents a single configuration in CFS.
+
+    This abstract base class is subclassed to create the CFS v2- v3-specific
+    classes.
+    """
+
+    # Subclasses must set these class variables to the appropriate classes
+    cfs_config_layer_cls: type[CFSLayerBase]
+    cfs_additional_inventory_cls: type[CFSLayerBase]
+
+    def __init__(self, cfs_client: 'CFSClientBase', data: Dict) -> None:
+        """Create a new CFSConfiguration.
+
+        Args:
+            cfs_client: the CFSClient instance to use for interacting with CFS
+            data: the data for the configuration from CFS
+        """
         self._cfs_client = cfs_client
         self.data = data
-        self.layers = [CFSConfigurationLayer.from_cfs(layer_data)
+        self.layers = [self.cfs_config_layer_cls.from_cfs(layer_data)
                        for layer_data in self.data.get('layers', [])]
+        self.additional_inventory: Optional[CFSLayerBase] = None
+        if 'additional_inventory' in self.data:
+            self.additional_inventory = self.cfs_additional_inventory_cls.from_cfs(
+                self.data['additional_inventory'])
         self.changed = False
 
     @classmethod
-    def empty(cls, cfs_client: 'CFSClient') -> 'CFSConfiguration':
+    def empty(cls, cfs_client: 'CFSClientBase') -> 'CFSConfigurationBase':
         """Get a new empty CFSConfiguration with no layers.
 
         Returns:
             a new empty configuration
         """
-        return cls(cfs_client, {
-            'layers': []
-        })
+        return cls(cfs_client, {})
 
     @property
     def name(self) -> Optional[str]:
@@ -382,12 +605,33 @@ class CFSConfiguration:
         return self.data.get('name')
 
     @property
+    def passthrough_data(self) -> dict[str, Any]:
+        """a dict containing any additional data to pass through to CFS
+
+        This preserves any additional data that should be maintained when making
+        a PUT request to update the configuration in CFS. Currently, the only
+        field that will be saved here is "description", but this safeguards
+        against any additional fields that may be added by CFS in the future.
+        """
+        # Note: both the CFS v2 and v3 versions of the lastUpdated field are ignored
+        return {key: value for key, value in self.data.items()
+                if key not in ('layers', 'additional_inventory', 'lastUpdated',
+                               'last_updated', 'name')}
+
+    @property
     def req_payload(self) -> Dict:
-        """a dict containing just the layers key used to update in requests"""
-        return {'layers': [layer.req_payload for layer in self.layers]}
+        """the request payload to provide in a PUT request to create/update the configuration"""
+        payload: Dict = {
+            'layers': [layer.req_payload for layer in self.layers],
+        }
+        if self.additional_inventory:
+            payload['additional_inventory'] = self.additional_inventory.req_payload
+        payload.update(self.passthrough_data)
+        return payload
 
     def save_to_cfs(self, name: Optional[str] = None,
-                    overwrite: bool = True, backup_suffix: Union[str, None] = None) -> 'CFSConfiguration':
+                    overwrite: bool = True, backup_suffix: Union[str, None] = None,
+                    request_params: Dict = None) -> 'CFSConfigurationBase':
         """Save the configuration to CFS, optionally with a new name.
 
         Args:
@@ -400,6 +644,9 @@ class CFSConfiguration:
             backup_suffix: if specified, before saving the current version of
                 the CFS configuration, if it already exists in CFS, save a
                 backup with the given suffix.
+            request_params: request parameters passed along to CFS when saving
+                the new CFS configuration (e.g. drop_branches). Not passed when
+                saving the backup.
 
         Returns:
             the new configuration that was saved to CFS
@@ -445,24 +692,23 @@ class CFSConfiguration:
                                             f'and will not be overwritten.')
             if backup_suffix:
                 backup_config_name = f'{cfs_name}{backup_suffix}'
+                # CFS does not allow certain read-only properties in a PUT request, so strip them
+                for prop in ('name', 'lastUpdated', 'last_updated'):
+                    existing_cfs_config_data.pop(prop, None)
                 try:
-                    backup_config = CFSConfiguration(self._cfs_client, existing_cfs_config_data)
-                    backup_config.save_to_cfs(name=backup_config_name)
-                except CFSConfigurationError as err:
+                    self._cfs_client.put_configuration(backup_config_name, existing_cfs_config_data)
+                except APIError as err:
                     raise CFSConfigurationError(f'Failed to back up CFS configuration "{cfs_name}" '
                                                 f'to "{backup_config_name}": {err}') from err
 
         try:
-            response_json = self._cfs_client.put('configurations', cfs_name,
-                                                 json=self.req_payload).json()
+            response_json = self._cfs_client.put_configuration(
+                cfs_name, self.req_payload, request_params=request_params)
         except APIError as err:
-            raise CFSConfigurationError(f'Failed to update CFS configuration "{cfs_name}": {err}')
-        except ValueError as err:
-            raise CFSConfigurationError(f'Failed to decode JSON response from updating '
-                                        f'CFS configuration "{cfs_name}": {err}')
+            raise CFSConfigurationError(str(err)) from err
 
         LOGGER.info('Successfully saved CFS configuration "%s"', cfs_name)
-        return CFSConfiguration(self._cfs_client, response_json)
+        return self.__class__(self._cfs_client, response_json)
 
     def save_to_file(self, file_path: str, overwrite: bool = True,
                      backup_suffix: Union[str, None] = None) -> None:
@@ -505,7 +751,8 @@ class CFSConfiguration:
         except OSError as err:
             raise CFSConfigurationError(f'Failed to write to file file_path: {err}')
 
-    def ensure_layer(self, layer: CFSConfigurationLayer, state: LayerState = LayerState.PRESENT) -> None:
+    def ensure_layer(self, layer: CFSLayerBase,
+                     state: LayerState = LayerState.PRESENT) -> None:
         """Ensure a layer exists or does not exist with the given parameters.
 
         Args:
@@ -535,6 +782,9 @@ class CFSConfiguration:
                     for updated_prop, update in updated_props.items():
                         LOGGER.info('Property "%s" of %s updated from %s to %s',
                                     updated_prop, existing_layer, update[0], update[1])
+
+                # Preserve any existing additional data in the layer
+                layer.additional_data = deepcopy(existing_layer.additional_data)
                 new_layers.append(layer)
             else:
                 # This layer doesn't match, so leave it untouched
@@ -553,8 +803,30 @@ class CFSConfiguration:
             LOGGER.info('No changes to configuration "%s" are necessary.', self.name)
 
 
+class CFSV2Configuration(CFSConfigurationBase):
+    """CFS V2 configuration"""
+
+    cfs_config_layer_cls = CFSV2ConfigurationLayer
+    cfs_additional_inventory_cls = CFSV2AdditionalInventoryLayer
+
+
+# This preserves backwards-compatibility with earlier versions of this library
+# which did not distinguish between CFS API versions
+CFSConfiguration = CFSV2Configuration
+
+
+class CFSV3Configuration(CFSConfigurationBase):
+    """CFS V3 configuration"""
+
+    cfs_config_layer_cls = CFSV3ConfigurationLayer
+    cfs_additional_inventory_cls = CFSV3AdditionalInventoryLayer
+
+
 class CFSImageConfigurationSession:
     """A class representing an image customization CFS configuration session
+
+    The same class is used for both CFS v2 and v3 since the only difference here
+    is the property name for the start time.
 
     Attributes:
         data: the data from the CFS API for this session
@@ -575,7 +847,7 @@ class CFSImageConfigurationSession:
     PENDING_VALUE = 'pending'
     # Value reported by CFS in status.session.succeeded when session has succeeded
     SUCCEEDED_VALUE = 'true'
-    # Hardcode the namespace in which kuberenetes jobs are created since CFS
+    # Hardcode the namespace in which Kubernetes jobs are created since CFS
     # sessions do not record this information
     KUBE_NAMESPACE = 'services'
 
@@ -585,7 +857,7 @@ class CFSImageConfigurationSession:
     CONTAINER_SUCCEEDED_VALUE = 'succeeded'
     CONTAINER_FAILED_VALUE = 'failed'
 
-    def __init__(self, data: Dict, cfs_client: 'CFSClient', image_name: str):
+    def __init__(self, data: Dict, cfs_client: 'CFSClientBase', image_name: str):
         """Create a new CFSImageConfigurationSession
 
         Args:
@@ -648,7 +920,10 @@ class CFSImageConfigurationSession:
     @property
     def start_time(self) -> datetime:
         """The start time of this CFS session"""
+        # In CFS v2, the property is startTime. In CFS v3, it's start_time
         start_time_str = get_val_by_path(self.data, 'status.session.startTime')
+        if start_time_str is None:
+            start_time_str = get_val_by_path(self.data, 'status.session.start_time')
         # Once we can rely on Python 3.7 or greater, can switch this to use fromisoformat
         return datetime.strptime(str(start_time_str), '%Y-%m-%dT%H:%M:%S')
 
@@ -782,7 +1057,7 @@ class CFSImageConfigurationSession:
         Returns:
             One of 'running', 'waiting', 'succeeded', or 'failed'
         """
-        # The Python Kuberenetes client docs are misleading in that they
+        # The Python Kubernetes client docs are misleading in that they
         # imply only one of these keys will be present, but in reality,
         # they are all present, and set to None if not the current state
         if not container_status.state:
@@ -885,7 +1160,7 @@ class CFSImageConfigurationSession:
                 status_by_name[container_name] = status
 
         if state_log_msgs:
-            LOGGER.info(f'CFS session: {self.name: <{CFSClient.MAX_SESSION_NAME_LENGTH}} '
+            LOGGER.info(f'CFS session: {self.name: <{CFSClientBase.MAX_SESSION_NAME_LENGTH}} '
                         f'Image: {self.image_name}:')
             for msg in state_log_msgs:
                 LOGGER.info(f'    {msg}')
@@ -947,9 +1222,25 @@ class CFSImageConfigurationSession:
             self.update_pod_status(kube_client)
 
 
-class CFSClient(APIGatewayClient):
-    base_resource_path = 'cfs/v2/'
+class CFSClientBase(APIGatewayClient, ABC):
     MAX_SESSION_NAME_LENGTH = 45
+    configuration_cls: Type[CFSConfigurationBase]
+
+    @staticmethod
+    @abstractmethod
+    def join_words(*words: str) -> str:
+        """Join words together according to the convention used by the CFS version.
+
+        E.g. CFS v2 uses camelCase while CFS v3 uses snake_case
+
+        Args:
+            *words: the words to join together
+
+        Returns:
+            The words joined together according to the convention of the CFS API
+            version.
+        """
+        pass
 
     @staticmethod
     def get_valid_session_name(prefix: str = 'sat') -> str:
@@ -975,7 +1266,7 @@ class CFSClient(APIGatewayClient):
         uuid_str = str(uuid.uuid4())
 
         # Subtract an additional 1 to account for "-" separating prefix from uuid
-        prefix_max_len = CFSClient.MAX_SESSION_NAME_LENGTH - len(uuid_str) - 1
+        prefix_max_len = CFSClientBase.MAX_SESSION_NAME_LENGTH - len(uuid_str) - 1
         if len(prefix) > prefix_max_len:
             LOGGER.warning(f'Given CFS session prefix is too long and will be '
                            f'truncated ({len(prefix)} > {prefix_max_len})')
@@ -1028,22 +1319,33 @@ class CFSClient(APIGatewayClient):
         else:
             return api_version >= VersionInfo(1, 12, 0)
 
-    def put_configuration(self, config_name: str, request_body: Dict) -> None:
+    def put_configuration(self, config_name: str, request_body: Dict,
+                          request_params: Optional[Dict] = None) -> Dict:
         """Create a new configuration or update an existing configuration
 
         Args:
             config_name: the name of the configuration to create/update
             request_body: the configuration data, which should have a
                 'layers' key.
+            request_params: the parameters to pass
+
+        Returns:
+            The details of the newly updated or created session
         """
-        self.put('configurations', config_name, json=request_body)
+        try:
+            return self.put('configurations', config_name, json=request_body, req_param=request_params).json()
+        except APIError as err:
+            raise APIError(f'Failed to update CFS configuration {config_name}: {err}')
+        except ValueError as err:
+            raise APIError(f'Failed to parse JSON in response from CFS when updating '
+                           f'CFS configuration {config_name}: {err}')
 
     def get_session(self, name: str) -> Dict:
         """Get details for a session.
 
         Args:
             name: the name of the session to get
-k
+
         Returns:
             The details about the session
         """
@@ -1080,7 +1382,7 @@ k
         """
         request_body: Dict = {
             'name': session_name,
-            'configurationName': config_name,
+            self.join_words('configuration', 'name'): config_name,
             'target': {
                 'definition': 'image',
                 'groups': [
@@ -1105,7 +1407,7 @@ k
 
         return CFSImageConfigurationSession(created_session, self, image_name)
 
-    def get_configuration(self, name: str) -> CFSConfiguration:
+    def get_configuration(self, name: str) -> CFSConfigurationBase:
         """Get a CFS configuration by name."""
         try:
             config_data = self.get('configurations', name).json()
@@ -1114,10 +1416,11 @@ k
         except json.JSONDecodeError as err:
             raise APIError(f'Invalid JSON response received from CFS when getting '
                            f'configuration "{name}" from CFS: {err}')
-        return CFSConfiguration(self, config_data)
+        # Return an appropriate CFS configuration
+        return self.configuration_cls(self, config_data)
 
-    def get_configurations_for_components(self, hsm_client: HSMClient, **kwargs: str) -> List[CFSConfiguration]:
-        """Configurations for components matching the given params.
+    def get_configurations_for_components(self, hsm_client: HSMClient, **kwargs: str) -> List[CFSConfigurationBase]:
+        """Get configurations for components matching the given params.
 
         Parameters passed into this function should be valid HSM component
         attributes.
@@ -1136,13 +1439,14 @@ k
         """
         target_xnames = hsm_client.get_component_xnames(params=kwargs or None)
 
-        LOGGER.info('Querying CFS configurations for the following NCNs: %s',
+        LOGGER.info('Querying CFS configurations for the following components: %s',
                     ', '.join(target_xnames))
 
         desired_config_names = set()
         for xname in target_xnames:
             try:
-                desired_config_name = self.get('components', xname).json().get('desiredConfig')
+                desired_config_name = self.get('components', xname).json().get(
+                    self.join_words('desired', 'config'))
                 if desired_config_name:
                     LOGGER.info('Found configuration "%s" for component %s',
                                 desired_config_name, xname)
@@ -1156,6 +1460,20 @@ k
 
         return [self.get_configuration(config_name) for config_name in desired_config_names]
 
+    @abstractmethod
+    def get_components(self, params: Dict = None) -> Generator[Dict, None, None]:
+        """Get all the CFS components.
+
+        This method must handle paging if necessary.
+
+        Args:
+            params: the parameters to pass to the GET on components
+
+        Yields:
+            The CFS components.
+        """
+        pass
+
     def get_component_ids_using_config(self, config_name: str) -> List[str]:
         """Get a list of CFS components using the given CFS configuration.
 
@@ -1167,13 +1485,12 @@ k
             The list of component IDs of CFS components using the given CFS
             configuration as their desiredConfig.
         """
+        filter_params = {self.join_words('config', 'name'): config_name}
         try:
-            components = self.get('components', params={'configName': config_name}).json()
+            return [component['id'] for component in self.get_components(params=filter_params)]
         except (APIError, ValueError) as err:
             raise APIError(f'Failed to get components using configuration '
                            f'"{config_name}": {err}') from err
-        try:
-            return [component['id'] for component in components]
         except KeyError as err:
             raise APIError(f'Failed to get components using configuration "{config_name}: '
                            f'one or more components missing {err} property') from err
@@ -1197,16 +1514,91 @@ k
         """
         patch_params: Dict = {}
         if desired_config is not None:
-            patch_params['desiredConfig'] = desired_config
+            patch_params[self.join_words('desired', 'config')] = desired_config
         if enabled is not None:
             patch_params['enabled'] = enabled
         if clear_state:
             patch_params['state'] = []
         if clear_error:
-            patch_params['errorCount'] = 0
+            patch_params[self.join_words('error', 'count')] = 0
 
         if patch_params:
             self.patch('components', component_id, json=patch_params)
         else:
             LOGGER.warning(f'No property changes were requested during update '
                            f'of CFS component with id {component_id}.')
+
+    @staticmethod
+    def get_cfs_client(session: Session, version: str, **kwargs: Any) -> 'CFSClientBase':
+        """Instantiate a CFSVxClient for the given API version.
+
+        Args:
+            session (csm_api_client.Session): session object to pass through to the client
+            version (Optional[str]): 'v2' or 'v3'
+
+        Additional kwargs are passed through to the underlying CFSVxClient
+        constructor.
+
+        Returns:
+            An instance of a subclass of `CFSClientBase`.
+
+        Raises:
+            ValueError: if the given version string is not valid
+        """
+        cfs_client_cls = {
+            'v2': CFSV2Client,
+            'v3': CFSV3Client,
+        }.get(version)
+
+        if cfs_client_cls is None:
+            raise ValueError(f'Invalid CFS API version "{version}"')
+
+        return cfs_client_cls(session, **kwargs)
+
+
+class CFSV2Client(CFSClientBase):
+    base_resource_path = 'cfs/v2'
+    configuration_cls = CFSV2Configuration
+
+    @staticmethod
+    def join_words(*words: str) -> str:
+        return ''.join([words[0].lower()] + [word.capitalize() for word in words[1:]])
+
+    def get_components(self, params: Dict = None) -> Generator[Dict, None, None]:
+        try:
+            yield from self.get('components', params=params).json()
+        except APIError as err:
+            raise APIError(f'Failed to get CFS components: {err}')
+        except ValueError as err:
+            raise APIError(f'Failed to parse JSON in response from CFS when getting '
+                           f'components: {err}')
+
+
+# Create an alias for CFSClient that points at CFSV2Client to preserve backwards compatibility
+CFSClient = CFSV2Client
+
+
+class CFSV3Client(CFSClientBase):
+    base_resource_path = 'cfs/v3'
+    configuration_cls = CFSV3Configuration
+
+    @staticmethod
+    def join_words(*words: str) -> str:
+        return '_'.join([word.lower() for word in words])
+
+    def get_components(self, params: Dict = None) -> Generator[Dict, None, None]:
+        # On the first request, pass in user-specified parameters
+        next_params = params
+        try:
+            while True:
+                response = self.get('components', params=next_params).json()
+                yield from response['components']
+                # The CFS API preserves user-specified parameters and adds pagination parameters
+                next_params = response.get('next')
+                if not next_params:
+                    break
+        except APIError as err:
+            raise APIError(f'Failed to get CFS components: {err}')
+        except ValueError as err:
+            raise APIError(f'Failed to parse JSON in response from CFS when getting '
+                           f'components: {err}')
