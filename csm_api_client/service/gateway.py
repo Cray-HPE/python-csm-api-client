@@ -127,7 +127,7 @@ class APIGatewayClient:
         req_type: str = 'GET',
         req_param: Optional[Dict] = None,
         req_body: Optional[Dict] = None,
-        json: Dict = None,
+        json: Union[Dict[Any, Any], None] = None,
         raise_not_ok: bool = True,
     ) -> Response:
         """Perform HTTP request with type `req_type` to resource given in `args`.
