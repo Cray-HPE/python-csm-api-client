@@ -49,7 +49,7 @@ function python_package() {
 }
 
 function typecheck() {
-    in_venv poetry run mypy
+    in_venv poetry run mypy --implicit-optional
 }
 
 function main() {

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "csm-api-client"
-version = "2.2.1"
+version = "2.2.2"
 description = "Python client library for CSM APIs"
 authors = [
     "Ryan Haasken <ryan.haasken@hpe.com>",
@@ -26,7 +26,7 @@ semver = "^3.0.2"
 
 [tool.poetry.group.dev.dependencies]
 nose2 = {version = "^0.12.0", extras = ["coverage_plugin"]}
-mypy = "^0.971"
+mypy = "^1.11.2"
 types-PyYAML = "<6.0"
 types-oauthlib = "^3.2.0"
 types-requests = "<3.0"
