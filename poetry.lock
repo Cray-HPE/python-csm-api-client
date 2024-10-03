@@ -21,17 +21,17 @@ tests-mypy = ["mypy (>=1.11.1)", "pytest-mypy-plugins"]
 
 [[package]]
 name = "boto3"
-version = "1.35.28"
+version = "1.35.30"
 description = "The AWS SDK for Python"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "boto3-1.35.28-py3-none-any.whl", hash = "sha256:dc088b86a14f17d3cd2e96915c6ccfd31bce640dfe9180df579ed311bc6bf0fc"},
-    {file = "boto3-1.35.28.tar.gz", hash = "sha256:8960fc458b9ba3c8a9890a607c31cee375db821f39aefaec9ff638248e81644a"},
+    {file = "boto3-1.35.30-py3-none-any.whl", hash = "sha256:d89c3459db89c5408e83219ab849ffd0146bc4285e75cdc67c6e45d390a12df2"},
+    {file = "boto3-1.35.30.tar.gz", hash = "sha256:d2851aec8e9dc6937977acbe9a5124ecc31b3ad5f50a10cd9ae52636da3f52fa"},
 ]
 
 [package.dependencies]
-botocore = ">=1.35.28,<1.36.0"
+botocore = ">=1.35.30,<1.36.0"
 jmespath = ">=0.7.1,<2.0.0"
 s3transfer = ">=0.10.0,<0.11.0"
 
@@ -40,13 +40,13 @@ crt = ["botocore[crt] (>=1.21.0,<2.0a0)"]
 
 [[package]]
 name = "boto3-stubs"
-version = "1.35.28"
-description = "Type annotations for boto3 1.35.28 generated with mypy-boto3-builder 8.1.2"
+version = "1.35.30"
+description = "Type annotations for boto3 1.35.30 generated with mypy-boto3-builder 8.1.2"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "boto3_stubs-1.35.28-py3-none-any.whl", hash = "sha256:f6c9720d3642a60980339a18c55772438eb5c5283041aadf04256d3c15559ea7"},
-    {file = "boto3_stubs-1.35.28.tar.gz", hash = "sha256:6fed2d5051a54229c6de3701eaa431b9bab7f9907fa933a38f34e680e70793a0"},
+    {file = "boto3_stubs-1.35.30-py3-none-any.whl", hash = "sha256:448f7025757f41926cf5c8a2ecae75954dcdc2a7a08d2a6e3250a7c8b5dbd7d7"},
+    {file = "boto3_stubs-1.35.30.tar.gz", hash = "sha256:159c242ebe82ef12ab561a809acc0b5036d23bc93be080ccd561d2661bbe33ef"},
 ]
 
 [package.dependencies]
@@ -98,7 +98,7 @@ bedrock-agent = ["mypy-boto3-bedrock-agent (>=1.35.0,<1.36.0)"]
 bedrock-agent-runtime = ["mypy-boto3-bedrock-agent-runtime (>=1.35.0,<1.36.0)"]
 bedrock-runtime = ["mypy-boto3-bedrock-runtime (>=1.35.0,<1.36.0)"]
 billingconductor = ["mypy-boto3-billingconductor (>=1.35.0,<1.36.0)"]
-boto3 = ["boto3 (==1.35.28)", "botocore (==1.35.28)"]
+boto3 = ["boto3 (==1.35.30)", "botocore (==1.35.30)"]
 braket = ["mypy-boto3-braket (>=1.35.0,<1.36.0)"]
 budgets = ["mypy-boto3-budgets (>=1.35.0,<1.36.0)"]
 ce = ["mypy-boto3-ce (>=1.35.0,<1.36.0)"]
@@ -449,13 +449,13 @@ xray = ["mypy-boto3-xray (>=1.35.0,<1.36.0)"]
 
 [[package]]
 name = "botocore"
-version = "1.35.28"
+version = "1.35.30"
 description = "Low-level, data-driven core of boto 3."
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "botocore-1.35.28-py3-none-any.whl", hash = "sha256:b66c78f3d6379bd16f0362f07168fa7699cdda3921fc880047192d96f2c8c527"},
-    {file = "botocore-1.35.28.tar.gz", hash = "sha256:115d13f2172d8e9fa92e8d913f0e80092b97624d190f46772ed2930d4a355d55"},
+    {file = "botocore-1.35.30-py3-none-any.whl", hash = "sha256:3bb9f9dde001608671ea74681ac3cec06bbbb10cba8cb8c1387a25e843075ce0"},
+    {file = "botocore-1.35.30.tar.gz", hash = "sha256:ab5350e8a50e48d371fa2d517d65c29a40c43788cb9a15387f93eac5a23df0fd"},
 ]
 
 [package.dependencies]
@@ -471,13 +471,13 @@ crt = ["awscrt (==0.21.5)"]
 
 [[package]]
 name = "botocore-stubs"
-version = "1.35.28"
+version = "1.35.30"
 description = "Type annotations and code completion for botocore"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "botocore_stubs-1.35.28-py3-none-any.whl", hash = "sha256:f59336b4ccfb2cf1f3714ab9f61f09205f4039383cf329f61c932c81286cadc4"},
-    {file = "botocore_stubs-1.35.28.tar.gz", hash = "sha256:1421dd9c6ba4f151d5f756a1dc18269141dc26a7b911f5f6e72ecb808879086b"},
+    {file = "botocore_stubs-1.35.30-py3-none-any.whl", hash = "sha256:2b986965d1e62b78e2d0bdb5f24a57f911227f0da6f8b54686f726e9fb5ddca4"},
+    {file = "botocore_stubs-1.35.30.tar.gz", hash = "sha256:7c13533ccaf2941bd3c09b1a8564a841c7167c3cebb8bcfb7ea45f9b5607bf25"},
 ]
 
 [package.dependencies]
@@ -698,8 +698,8 @@ description = "Cray Product Catalog"
 optional = false
 python-versions = ">=3.9, <4"
 files = [
-    {file = "cray_product_catalog-2.4.1-py3-none-any.whl", hash = "sha256:1233a24f9a57a5215263d82ebcc72cf7ba589d09a946e2f1169e84d937926b96"},
-    {file = "cray_product_catalog-2.4.1.tar.gz", hash = "sha256:8ab7fd81b71d4f9015c617aa7c588ab8a824615c907e93f06edfb8f3b944b968"},
+    {file = "cray_product_catalog-2.4.1-py3-none-any.whl", hash = "sha256:e826e2ff6d3886f3836827e5b98905da5d9ada755e0d7f832c366af909a0def8"},
+    {file = "cray_product_catalog-2.4.1.tar.gz", hash = "sha256:4ed3868f7686e35c6092dd96c70421c680f415123cd9af9b1c124c78f6b2f698"},
 ]
 
 [package.dependencies]
@@ -712,16 +712,6 @@ urllib3 = "*"
 type = "legacy"
 url = "https://artifactory.algol60.net/artifactory/csm-python-modules/simple"
 reference = "algol60"
-
-[[package]]
-name = "durationpy"
-version = "0.7"
-description = "Module for converting between datetime.timedelta and Go's Duration strings."
-optional = false
-python-versions = "*"
-files = [
-    {file = "durationpy-0.7.tar.gz", hash = "sha256:8447c43df4f1a0b434e70c15a38d77f5c9bd17284bfc1ff1d430f233d5083732"},
-]
 
 [[package]]
 name = "google-auth"
@@ -854,24 +844,23 @@ referencing = ">=0.31.0"
 
 [[package]]
 name = "kubernetes"
-version = "31.0.0"
+version = "24.2.0"
 description = "Kubernetes python client"
 optional = false
 python-versions = ">=3.6"
 files = [
-    {file = "kubernetes-31.0.0-py2.py3-none-any.whl", hash = "sha256:bf141e2d380c8520eada8b351f4e319ffee9636328c137aa432bc486ca1200e1"},
-    {file = "kubernetes-31.0.0.tar.gz", hash = "sha256:28945de906c8c259c1ebe62703b56a03b714049372196f854105afe4e6d014c0"},
+    {file = "kubernetes-24.2.0-py2.py3-none-any.whl", hash = "sha256:da19d58865cf903a8c7b9c3691a2e6315d583a98f0659964656dfdf645bf7e49"},
+    {file = "kubernetes-24.2.0.tar.gz", hash = "sha256:9900f12ae92007533247167d14cdee949cd8c7721f88b4a7da5f5351da3834cd"},
 ]
 
 [package.dependencies]
 certifi = ">=14.05.14"
-durationpy = ">=0.7"
 google-auth = ">=1.0.1"
-oauthlib = ">=3.2.2"
 python-dateutil = ">=2.5.3"
 pyyaml = ">=5.4.1"
 requests = "*"
 requests-oauthlib = "*"
+setuptools = ">=21.0.0"
 six = ">=1.9.0"
 urllib3 = ">=1.24.2"
 websocket-client = ">=0.32.0,<0.40.0 || >0.40.0,<0.41.dev0 || >=0.43.dev0"
@@ -1306,6 +1295,26 @@ files = [
 ]
 
 [[package]]
+name = "setuptools"
+version = "75.1.0"
+description = "Easily download, build, install, upgrade, and uninstall Python packages"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "setuptools-75.1.0-py3-none-any.whl", hash = "sha256:35ab7fd3bcd95e6b7fd704e4a1539513edad446c097797f2985e0e4b960772f2"},
+    {file = "setuptools-75.1.0.tar.gz", hash = "sha256:d59a21b17a275fb872a9c3dae73963160ae079f1049ed956880cd7c09b120538"},
+]
+
+[package.extras]
+check = ["pytest-checkdocs (>=2.4)", "pytest-ruff (>=0.2.1)", "ruff (>=0.5.2)"]
+core = ["importlib-metadata (>=6)", "importlib-resources (>=5.10.2)", "jaraco.collections", "jaraco.functools", "jaraco.text (>=3.7)", "more-itertools", "more-itertools (>=8.8)", "packaging", "packaging (>=24)", "platformdirs (>=2.6.2)", "tomli (>=2.0.1)", "wheel (>=0.43.0)"]
+cover = ["pytest-cov"]
+doc = ["furo", "jaraco.packaging (>=9.3)", "jaraco.tidelift (>=1.4)", "pygments-github-lexers (==0.0.5)", "pyproject-hooks (!=1.1)", "rst.linker (>=1.9)", "sphinx (>=3.5)", "sphinx-favicon", "sphinx-inline-tabs", "sphinx-lint", "sphinx-notfound-page (>=1,<2)", "sphinx-reredirects", "sphinxcontrib-towncrier", "towncrier (<24.7)"]
+enabler = ["pytest-enabler (>=2.2)"]
+test = ["build[virtualenv] (>=1.0.3)", "filelock (>=3.4.0)", "ini2toml[lite] (>=0.14)", "jaraco.develop (>=7.21)", "jaraco.envs (>=2.2)", "jaraco.path (>=3.2.0)", "jaraco.test", "packaging (>=23.2)", "pip (>=19.1)", "pyproject-hooks (!=1.1)", "pytest (>=6,!=8.1.*)", "pytest-home (>=0.5)", "pytest-perf", "pytest-subprocess", "pytest-timeout", "pytest-xdist (>=3)", "tomli-w (>=1.0.0)", "virtualenv (>=13.0.0)", "wheel (>=0.44.0)"]
+type = ["importlib-metadata (>=7.0.2)", "jaraco.develop (>=7.21)", "mypy (==1.11.*)", "pytest-mypy"]
+
+[[package]]
 name = "six"
 version = "1.16.0"
 description = "Python 2 and 3 compatibility utilities"
@@ -1511,4 +1520,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9"
-content-hash = "8ba997249175e52f974a7f18b77ec4db84b3457d95b3d7f64e0ff718b13454b1"
+content-hash = "99209c9b23e6ea58a5f3428b0458ab3fa05a0e4b4db56782b1ad325e00cc2191"
