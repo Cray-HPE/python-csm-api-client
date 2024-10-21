@@ -64,24 +64,11 @@ def vcs_creds_helper() -> Generator[Dict[str, str], None, None]:
             set to the path to the script for obtaining VCS credentials.
     """
     # Get the password directly from k8s to avoid leaking it via the /proc filesystem
-    password_file_path = '/tmp/vcs_passwd'
-
     try:
-        if os.path.exists(password_file_path):
-            # If the file exists, create a script that cats the file
-            with NamedTemporaryFile(delete=False) as cred_helper_script:
-                cred_helper_script.write((
-                    '#!/bin/bash\n'
-                    'cat {password_file}\n'.format(password_file=password_file_path).encode()
-                ))
-            os.system(f'echo "{password_file_path}"')
-            os.system(f'cat "{password_file_path}"')
-        else:
-            # If the file doesn't exist, create a script to fetch from Kubernetes
-            with NamedTemporaryFile(delete=False) as cred_helper_script:
-                cred_helper_script.write('#!/bin/bash\n'
-                                         'kubectl get secret -n services vcs-user-credentials '
-                                         '--template={{.data.vcs_password}} | base64 -d'.encode())
+        with NamedTemporaryFile(delete=False) as cred_helper_script:
+            cred_helper_script.write('#!/bin/bash\n'
+                                     'kubectl get secret -n services vcs-user-credentials '
+                                     '--template={{.data.vcs_password}} | base64 -d'.encode())
 
         os.chmod(cred_helper_script.name, 0o700)  # Make executable by user
         env = dict(os.environ)
