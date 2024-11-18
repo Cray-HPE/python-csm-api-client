@@ -1474,6 +1474,34 @@ class CFSClientBase(APIGatewayClient, ABC):
         """
         pass
 
+    @abstractmethod
+    def get_configurations(self, params: Dict = None) -> Generator[Dict, None, None]:
+        """Get all the CFS configurations.
+
+        This method must handle paging if necessary.
+
+        Args:
+            params: the parameters to pass to the GET on configurations
+
+        Yields:
+            The CFS configurations.
+        """
+        pass
+
+    @abstractmethod
+    def get_sessions(self, params: Dict = None) -> Generator[Dict, None, None]:
+        """Get all the CFS sessions.
+
+        This method must handle paging if necessary.
+
+        Args:
+            params: the parameters to pass to the GET on sessions
+
+        Yields:
+            The CFS sessions.
+        """
+        pass
+
     def get_component_ids_using_config(self, config_name: str) -> List[str]:
         """Get a list of CFS components using the given CFS configuration.
 
@@ -1564,14 +1592,29 @@ class CFSV2Client(CFSClientBase):
     def join_words(*words: str) -> str:
         return ''.join([words[0].lower()] + [word.capitalize() for word in words[1:]])
 
-    def get_components(self, params: Dict = None) -> Generator[Dict, None, None]:
+    def get_resource(self, resource: str, params: Dict = None) -> Generator[Dict, None, None]:
+        """Get a resource from the CFS API.
+
+        Args:
+            resource: the name of the resource to get (e.g. 'components')
+            params: the parameters to pass to the GET on the resource
+        """
         try:
-            yield from self.get('components', params=params).json()
+            yield from self.get(resource, params=params).json()
         except APIError as err:
-            raise APIError(f'Failed to get CFS components: {err}')
+            raise APIError(f'Failed to get CFS {resource}: {err}')
         except ValueError as err:
             raise APIError(f'Failed to parse JSON in response from CFS when getting '
-                           f'components: {err}')
+                           f'{resource}: {err}')
+
+    def get_components(self, params: Dict = None) -> Generator[Dict, None, None]:
+        yield from self.get_resource('components', params=params)
+
+    def get_configurations(self, params: Dict = None) -> Generator[Dict, None, None]:
+        yield from self.get_resource('configurations', params=params)
+
+    def get_sessions(self, params: Dict = None) -> Generator[Dict, None, None]:
+        yield from self.get_resource('sessions', params=params)
 
 
 # Create an alias for CFSClient that points at CFSV2Client to preserve backwards compatibility
@@ -1586,19 +1629,33 @@ class CFSV3Client(CFSClientBase):
     def join_words(*words: str) -> str:
         return '_'.join([word.lower() for word in words])
 
-    def get_components(self, params: Dict = None) -> Generator[Dict, None, None]:
+    def get_paged_resource(self, resource: str, params: Dict = None) -> Generator[Dict, None, None]:
+        """Get a paged resource from the CFS API.
+
+        Args:
+            resource: the name of the resource to get (e.g. 'components')
+            params: the parameters to pass to the GET on the resource
+        """
         # On the first request, pass in user-specified parameters
         next_params = params
         try:
             while True:
-                response = self.get('components', params=next_params).json()
-                yield from response['components']
-                # The CFS API preserves user-specified parameters and adds pagination parameters
+                response = self.get(resource, params=next_params).json()
+                yield from response[resource]
                 next_params = response.get('next')
                 if not next_params:
                     break
         except APIError as err:
-            raise APIError(f'Failed to get CFS components: {err}')
+            raise APIError(f'Failed to get CFS {resource}: {err}')
         except ValueError as err:
             raise APIError(f'Failed to parse JSON in response from CFS when getting '
-                           f'components: {err}')
+                           f'{resource}: {err}')
+
+    def get_components(self, params: Dict = None) -> Generator[Dict, None, None]:
+        yield from self.get_paged_resource('components', params=params)
+
+    def get_configurations(self, params: Dict = None) -> Generator[Dict, None, None]:
+        yield from self.get_paged_resource('configurations', params=params)
+
+    def get_sessions(self, params: Dict = None) -> Generator[Dict, None, None]:
+        yield from self.get_paged_resource('sessions', params=params)
