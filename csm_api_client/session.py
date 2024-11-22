@@ -99,7 +99,9 @@ class UserSession(Session):
     @cached_property
     def token_file_contents(self) -> Optional[Dict[str, str]]:
         """The contents of the token file, if it can be read, or None otherwise"""
+        self.token_filename = os.path.expanduser(self.token_filename)
         if not os.path.exists(self.token_filename):
+            LOGGER.error('Unable to find token file at the path %s', self.token_filename)
             return None
         try:
             with open(self.token_filename, 'r') as f:
