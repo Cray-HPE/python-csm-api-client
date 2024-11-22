@@ -1,7 +1,7 @@
 #
 # MIT License
 #
-# (C) Copyright 2019-2023 Hewlett Packard Enterprise Development LP
+# (C) Copyright 2019-2024 Hewlett Packard Enterprise Development LP
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -24,7 +24,6 @@
 """
 OAuth2 authentication support.
 """
-
 from abc import ABC, abstractmethod
 import base64
 from functools import cached_property
@@ -90,7 +89,7 @@ class UserSession(Session):
             username: the username whose token to use when authenticating
         """
         self.username = username
-        self.token_filename = token_filename
+        self.token_filename = os.path.expanduser(token_filename)
         self.host = host
         self.fetched_token = None
 

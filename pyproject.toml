@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "csm-api-client"
-version = "2.3.1"
+version = "2.3.2"
 description = "Python client library for CSM APIs"
 authors = [
     "Ryan Haasken <ryan.haasken@hpe.com>",
