@@ -1,7 +1,7 @@
 #
 # MIT License
 #
-# (C) Copyright 2019-2023 Hewlett Packard Enterprise Development LP
+# (C) Copyright 2019-2024 Hewlett Packard Enterprise Development LP
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -99,7 +99,9 @@ class UserSession(Session):
     @cached_property
     def token_file_contents(self) -> Optional[Dict[str, str]]:
         """The contents of the token file, if it can be read, or None otherwise"""
+        self.token_filename = os.path.expanduser(self.token_filename)
         if not os.path.exists(self.token_filename):
+            LOGGER.error('Unable to find token file at the path %s', self.token_filename)
             return None
         try:
             with open(self.token_filename, 'r') as f:
