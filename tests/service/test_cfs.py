@@ -1886,3 +1886,113 @@ class TestCFSV3Client(unittest.TestCase):
             call('components', params=None),
             call().json()
         ])
+
+    def test_get_configurations_paged(self):
+        """Test get_configurations method of CFSV3Client with paged results"""
+        cfs_client = CFSV3Client(Mock())
+        configurations = [
+            {'name': 'config-1'},
+            {'name': 'config-2'},
+            {'name': 'config-3'},
+            {'name': 'config-4'},
+            {'name': 'config-5'},
+        ]
+
+        base_params = {'limit': 2}
+        with patch.object(cfs_client, 'get') as mock_get:
+            mock_get.return_value.json.side_effect = [
+                {'configurations': configurations[:2], 'next': {'limit': 2, 'after': 'config-2'}},
+                {'configurations': configurations[2:4], 'next': {'limit': 2, 'after': 'config-4'}},
+                {'configurations': [configurations[4]], 'next': None}
+            ]
+
+            result = list(cfs_client.get_configurations(params=base_params))
+
+        self.assertEqual(configurations, result)
+        mock_get.assert_has_calls([
+            call('configurations', params=base_params),
+            call().json(),
+            call('configurations', params={'limit': 2, 'after': 'config-2'}),
+            call().json(),
+            call('configurations', params={'limit': 2, 'after': 'config-4'}),
+            call().json()
+        ])
+
+    def test_get_configurations_unpaged(self):
+        """Test get_configurations method of CFSV3Client when results are not paged"""
+        cfs_client = CFSV3Client(Mock())
+        configurations = [
+            {'name': 'config-1'},
+            {'name': 'config-2'},
+            {'name': 'config-3'},
+            {'name': 'config-4'},
+            {'name': 'config-5'},
+        ]
+
+        with patch.object(cfs_client, 'get') as mock_get:
+            mock_get.return_value.json.side_effect = [
+                {'configurations': configurations, 'next': None}
+            ]
+
+            result = list(cfs_client.get_configurations())
+
+        self.assertEqual(configurations, result)
+        mock_get.assert_has_calls([
+            call('configurations', params=None),
+            call().json()
+        ])
+
+    def test_get_sessions_paged(self):
+        """Test get_sessions method of CFSV3Client with paged results"""
+        cfs_client = CFSV3Client(Mock())
+        sessions = [
+            {'name': 'session-1'},
+            {'name': 'session-2'},
+            {'name': 'session-3'},
+            {'name': 'session-4'},
+            {'name': 'session-5'},
+        ]
+
+        base_params = {'limit': 2}
+        with patch.object(cfs_client, 'get') as mock_get:
+            mock_get.return_value.json.side_effect = [
+                {'sessions': sessions[:2], 'next': {'limit': 2, 'after': 'session-2'}},
+                {'sessions': sessions[2:4], 'next': {'limit': 2, 'after': 'session-4'}},
+                {'sessions': [sessions[4]], 'next': None}
+            ]
+
+            result = list(cfs_client.get_sessions(params=base_params))
+
+        self.assertEqual(sessions, result)
+        mock_get.assert_has_calls([
+            call('sessions', params=base_params),
+            call().json(),
+            call('sessions', params={'limit': 2, 'after': 'session-2'}),
+            call().json(),
+            call('sessions', params={'limit': 2, 'after': 'session-4'}),
+            call().json()
+        ])
+
+    def test_get_sessions_unpaged(self):
+        """Test get_sessions method of CFSV3Client when results are not paged"""
+        cfs_client = CFSV3Client(Mock())
+        sessions = [
+            {'name': 'session-1'},
+            {'name': 'session-2'},
+            {'name': 'session-3'},
+            {'name': 'session-4'},
+            {'name': 'session-5'},
+        ]
+
+        with patch.object(cfs_client, 'get') as mock_get:
+            mock_get.return_value.json.side_effect = [
+                {'sessions': sessions, 'next': None}
+            ]
+
+            result = list(cfs_client.get_sessions())
+
+        self.assertEqual(sessions, result)
+        mock_get.assert_has_calls([
+            call('sessions', params=None),
+            call().json()
+        ])
