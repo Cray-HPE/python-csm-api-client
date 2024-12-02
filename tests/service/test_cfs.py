@@ -609,7 +609,7 @@ class TestCFSV2ConfigurationLayer(unittest.TestCase):
         self.assertEqual(expected_payload, cfs_layer.req_payload)
 
     def test_payload_with_ims_require_dkms(self):
-        """Test req_payload property of CFSV2ConfigurationLayer with ims_require_dkms."""
+        """Test req_payload property of CFSV2ConfigurationLayer with ims_require_dkms set to True."""
         cfs_layer = CFSV2ConfigurationLayer(
             clone_url=self.clone_url, name=self.name,
             commit=self.commit, playbook=self.playbook,
@@ -622,6 +622,25 @@ class TestCFSV2ConfigurationLayer(unittest.TestCase):
             'playbook': self.playbook,
             'specialParameters': {
                 'imsRequireDkms': True,
+                'future_cfs_layer_special_parameter': 'special_value'
+            }
+        }
+        self.assertEqual(expected_payload, cfs_layer.req_payload)
+
+    def test_payload_with_ims_require_dkms_false(self):
+        """Test req_payload property of CFSV2ConfigurationLayer with ims_require_dkms set to False."""
+        cfs_layer = CFSV2ConfigurationLayer(
+            clone_url=self.clone_url, name=self.name,
+            commit=self.commit, playbook=self.playbook,
+            ims_require_dkms=False, additional_data=self.additional_data
+        )
+        expected_payload = {
+            'commit': self.commit,
+            'name': self.name,
+            'cloneUrl': self.clone_url,
+            'playbook': self.playbook,
+            'specialParameters': {
+                'imsRequireDkms': False,
                 'future_cfs_layer_special_parameter': 'special_value'
             }
         }
@@ -767,7 +786,7 @@ class TestCFSV3ConfigurationLayer(unittest.TestCase):
         self.assertEqual(expected_payload, cfs_layer.req_payload)
 
     def test_payload_with_ims_require_dkms(self):
-        """Test req_payload property of CFSV2ConfigurationLayer with ims_require_dkms."""
+        """Test req_payload property of CFSV3ConfigurationLayer with ims_require_dkms set to True"""
         cfs_layer = CFSV3ConfigurationLayer(
             clone_url=self.clone_url, name=self.name,
             commit=self.commit, playbook=self.playbook,
@@ -780,6 +799,25 @@ class TestCFSV3ConfigurationLayer(unittest.TestCase):
             'playbook': self.playbook,
             'special_parameters': {
                 'ims_require_dkms': True,
+                'future_cfs_layer_special_parameter': 'special_value'
+            }
+        }
+        self.assertEqual(expected_payload, cfs_layer.req_payload)
+
+    def test_payload_with_ims_require_dkms_false(self):
+        """Test req_payload property of CFSV3ConfigurationLayer with ims_require_dkms set to False"""
+        cfs_layer = CFSV3ConfigurationLayer(
+            clone_url=self.clone_url, name=self.name,
+            commit=self.commit, playbook=self.playbook,
+            ims_require_dkms=False, additional_data=self.additional_data
+        )
+        expected_payload = {
+            'commit': self.commit,
+            'name': self.name,
+            'clone_url': self.clone_url,
+            'playbook': self.playbook,
+            'special_parameters': {
+                'ims_require_dkms': False,
                 'future_cfs_layer_special_parameter': 'special_value'
             }
         }
