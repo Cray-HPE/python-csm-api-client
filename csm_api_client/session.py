@@ -90,7 +90,7 @@ class UserSession(Session):
             username: the username whose token to use when authenticating
         """
         self.username = username
-        self.token_filename = token_filename
+        self.token_filename = os.path.expanduser(token_filename)
         self.host = host
         self.fetched_token = None
 
@@ -99,10 +99,8 @@ class UserSession(Session):
     @cached_property
     def token_file_contents(self) -> Optional[Dict[str, str]]:
         """The contents of the token file, if it can be read, or None otherwise"""
-        self.token_filename = os.path.expanduser(self.token_filename)
         if not os.path.exists(self.token_filename):
-            LOGGER.error('Unable to find token file at the path %s', self.token_filename)
-            sys.exit(1)
+            return None
         try:
             with open(self.token_filename, 'r') as f:
                 token = json.load(f)
