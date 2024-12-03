@@ -277,7 +277,7 @@ class CFSLayerBase(ABC):
         req_payload = {**self.additional_data}
         for cfs_prop, attr in self.CFS_PROPS_TO_ATTRS.items():
             value = getattr(self, attr, None)
-            if value:
+            if value is not None:
                 set_val_by_path(req_payload, cfs_prop, value)
         return req_payload
 
