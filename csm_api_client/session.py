@@ -24,7 +24,6 @@
 """
 OAuth2 authentication support.
 """
-import sys
 from abc import ABC, abstractmethod
 import base64
 from functools import cached_property
