@@ -1799,8 +1799,11 @@ class TestCFSV2Client(unittest.TestCase):
         config_name = 'some-config-name'
 
         with patch.object(cfs_client, 'get', side_effect=APIError(err_msg)) as mock_get:
-            with self.assertRaisesRegex(APIError, 'Failed to get components '):
+            with self.assertLogs(level=logging.WARNING) as log:
                 cfs_client.get_component_ids_using_config(config_name)
+
+            self.assertIn("Failed to get CFS components:",
+                          log.output[0])
 
         mock_get.assert_called_once_with('components', params={'configName': config_name})
 

@@ -1602,7 +1602,7 @@ class CFSV2Client(CFSClientBase):
         try:
             yield from self.get(resource, params=params).json()
         except APIError as err:
-            raise APIError(f'Failed to get CFS {resource}: {err}')
+            LOGGER.warning(f'Failed to get CFS {resource}: {err}')
         except ValueError as err:
             raise APIError(f'Failed to parse JSON in response from CFS when getting '
                            f'{resource}: {err}')
