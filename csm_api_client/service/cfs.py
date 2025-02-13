@@ -1,7 +1,7 @@
 #
 # MIT License
 #
-# (C) Copyright 2021-2024 Hewlett Packard Enterprise Development LP
+# (C) Copyright 2021-2025 Hewlett Packard Enterprise Development LP
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -1628,6 +1628,32 @@ class CFSV3Client(CFSClientBase):
     @staticmethod
     def join_words(*words: str) -> str:
         return '_'.join([word.lower() for word in words])
+
+    def put_configuration(self, config_name: str, request_body: Dict,
+                          request_params: Optional[Dict] = None, drop_branches: bool = False) -> Dict:
+        """Create a new configuration or update an existing configuration
+
+        Args:
+            config_name: the name of the configuration to create/update
+            request_body: the configuration data, which should have a
+                'layers' key.
+            request_params: the parameters to pass
+            drop_branches: whether to drop branches and use commit hashes only
+
+        Returns:
+            The details of the newly updated or created session
+        """
+        if request_params is None:
+            request_params = {}
+        request_params['drop_branches'] = drop_branches
+
+        try:
+            return self.put('configurations', config_name, json=request_body, req_param=request_params).json()
+        except APIError as err:
+            raise APIError(f'Failed to update CFS configuration {config_name}: {err}')
+        except ValueError as err:
+            raise APIError(f'Failed to parse JSON in response from CFS when updating '
+                           f'CFS configuration {config_name}: {err}')
 
     def get_paged_resource(self, resource: str, params: Dict = None) -> Generator[Dict, None, None]:
         """Get a paged resource from the CFS API.

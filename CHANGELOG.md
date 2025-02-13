@@ -1,6 +1,6 @@
 # Changelog
 
-(C) Copyright 2020-2024 Hewlett Packard Enterprise Development LP
+(C) Copyright 2020-2025 Hewlett Packard Enterprise Development LP
 
 Permission is hereby granted, free of charge, to any person obtaining a
 copy of this software and associated documentation files (the "Software"),
@@ -25,10 +25,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.3] - 2025-02-07
+
+### Fixed
+- Added support for the `drop_branches` parameter in CFS v3 configurations.
+  This allows CFS to drop branch names from the CFS layers after resolving them to commit hashes when creating or updating configurations.
+
 ## [2.3.2] - 2024-11-26
 
 ### Fixed
--  Fixed issue that did not allow for paths containing `~` to be parsed correctly
+- Fixed issue that did not allow for paths containing `~` to be parsed correctly
 
 ## [2.3.1] - 2024-12-02
 
