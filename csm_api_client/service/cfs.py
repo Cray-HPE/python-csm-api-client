@@ -1677,6 +1677,28 @@ class CFSV3Client(CFSClientBase):
             raise APIError(f'Failed to parse JSON in response from CFS when getting '
                            f'{resource}: {err}')
 
+    def get_source_details(self, source_name: str) -> Dict:
+        """Get the details of a source by its name.
+
+        Args:
+            source_name: The name of the source to retrieve.
+
+        Returns:
+            A dictionary containing the details of the source, including
+            the clone_url and credentials.
+
+        Raises:
+            APIError: if there is a failure to retrieve the source details.
+        """
+        try:
+            response = self.get('sources', source_name)
+            return response.json()
+        except APIError as err:
+            raise APIError(f'Failed to get source details for {source_name}: {err}')
+        except ValueError as err:
+            raise APIError(f'Failed to parse JSON in response from CFS when getting '
+                           f'source details for {source_name}: {err}')
+
     def get_components(self, params: Dict = None) -> Generator[Dict, None, None]:
         yield from self.get_paged_resource('components', params=params)
 
