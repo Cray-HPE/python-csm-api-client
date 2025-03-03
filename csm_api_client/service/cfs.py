@@ -517,21 +517,25 @@ class CFSV3ConfigurationLayer(CFSV3AdditionalInventoryLayer):
     CFS_PROPS_TO_ATTRS['special_parameters.ims_require_dkms'] = 'ims_require_dkms'
     MATCHING_ATTRS = CFSV3AdditionalInventoryLayer.MATCHING_ATTRS + ['playbook', 'ims_require_dkms']
 
-    def __init__(self, playbook: str, ims_require_dkms: bool = None, **kwargs: Any) -> None:
+    def __init__(self, playbook: str, ims_require_dkms: bool = None, credentials: Optional[Dict] = None, source: Optional[str] = None, **kwargs: Any) -> None:
         """Create a new CFSV3ConfigurationLayer.
 
         Args:
             playbook: the name of the playbook to use for the layer
             ims_require_dkms: a special parameter for IMS that indicates whether
                 DKMS is required for the layer
+            credentials: the credentials to use for accessing the source
+            source: the name of the CFS source to use for the layer
+            **kwargs: additional arguments to pass to the constructor
 
         Raises:
-            ValueError: if clone_url or source is not specified, or branch or
+            ValueError: if source is not specified, or branch or
                 commit is not specified
         """
-        super().__init__(**kwargs)
+        super().__init__(source=source, **kwargs)
         self.playbook = playbook
         self.ims_require_dkms = ims_require_dkms
+        self.credentials = credentials
 
     def __str__(self) -> str:
         if self.clone_url:
@@ -560,6 +564,31 @@ class CFSV3ConfigurationLayer(CFSV3AdditionalInventoryLayer):
             datetime.now().strftime('%Y%m%dT%H%M%S')
         ]
         return '-'.join(name_components)
+
+    @classmethod
+    def from_source(cls, source: str, name: Optional[str] = None, playbook: Optional[str] = None,
+                    ims_require_dkms: Optional[bool] = None, credentials: Optional[Dict] = None,
+                    branch: Optional[str] = None, commit: Optional[str] = None, **kwargs: Any) -> 'CFSV3ConfigurationLayer':
+        """Create a new CFSV3ConfigurationLayer from a source.
+
+        Args:
+            source: the name of the CFS source to use for the layer
+            name: an optional name override
+            playbook: the name of the playbook to use for the layer
+            ims_require_dkms: a special parameter for IMS that indicates whether
+                DKMS is required for the layer
+            credentials: the credentials to use for accessing the source
+            branch: the branch to use for the layer
+            commit: the commit to use for the layer
+            **kwargs: additional arguments to pass along to __init__
+
+        Returns:
+            the layer constructed from the source
+        """
+        if playbook is None:
+            raise ValueError('The playbook is required for CFS v3 configuration layers.')
+        return cls(source=source, name=name, playbook=playbook, ims_require_dkms=ims_require_dkms,
+                   credentials=credentials, branch=branch, commit=commit, **kwargs)
 
 
 class CFSConfigurationBase(ABC):
@@ -1676,6 +1705,28 @@ class CFSV3Client(CFSClientBase):
         except ValueError as err:
             raise APIError(f'Failed to parse JSON in response from CFS when getting '
                            f'{resource}: {err}')
+
+    def get_source_details(self, source_name: str) -> Dict:
+        """Get the details of a source by its name.
+
+        Args:
+            source_name: The name of the source to retrieve.
+
+        Returns:
+            A dictionary containing the details of the source, including
+            the clone_url and credentials.
+
+        Raises:
+            APIError: if there is a failure to retrieve the source details.
+        """
+        try:
+            response = self.get('sources', source_name)
+            return response.json()
+        except APIError as err:
+            raise APIError(f'Failed to get source details for {source_name}: {err}')
+        except ValueError as err:
+            raise APIError(f'Failed to parse JSON in response from CFS when getting '
+                           f'source details for {source_name}: {err}')
 
     def get_components(self, params: Dict = None) -> Generator[Dict, None, None]:
         yield from self.get_paged_resource('components', params=params)
