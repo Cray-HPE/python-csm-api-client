@@ -1706,6 +1706,62 @@ class CFSV3Client(CFSClientBase):
             raise APIError(f'Failed to parse JSON in response from CFS when getting '
                            f'{resource}: {err}')
 
+    def create_image_customization_session(
+        self, session_name: str, config_name: str, image_id: str,
+        target_groups: Iterable[str], image_name: str,
+        debug_on_failure: bool = False
+    ) -> CFSImageConfigurationSession:
+        """Create a new image customization session.
+
+        Args:
+            session_name: the name of the session
+            config_name: the name of the configuration to use
+            image_id: the id of the IMS image to customize
+            target_groups: the group names to target. Each group
+                name specified here will be defined to point at the IMS image
+                specified by `image_id`.
+            image_name: the name of the image to create. If the version of the
+                CFS API supports naming the customized image, then this will be
+                the name of the resulting image. If not, then the name is just
+                used during logging, but the actual name will differ.
+            debug_on_failure: whether to enable debug-on-failure to keep the IMS
+                job running for debugging purposes.
+
+        Returns:
+            The created session
+        """
+        request_body: Dict = {
+            'name': session_name,
+            self.join_words('configuration', 'name'): config_name,
+            'target': {
+                'definition': 'image',
+                'groups': [
+                    {'name': target_group, 'members': [image_id]}
+                    for target_group in target_groups
+                ]
+            }
+        }
+
+        if self.supports_customized_image_name:
+            request_body['target']['image_map'] = [
+                {'source_id': image_id, 'result_name': image_name}
+            ]
+
+        # Add debug-on-failure to the request body if enabled
+        if debug_on_failure:
+            request_body['debug_on_failure'] = True
+
+        try:
+            LOGGER.debug(f'Creating CFS V3 image customization session with request body: {request_body}')
+            created_session = self.post('sessions', json=request_body).json()
+        except APIError as err:
+            raise APIError(f'Failed to create image customization session : {err}')
+        except ValueError as err:
+            raise APIError(f'Failed to parse JSON in response from CFS when '
+                           f'creating CFS session: {err}')
+
+        return CFSImageConfigurationSession(created_session, self, image_name)
+
     def get_source_details(self, source_name: str) -> Dict:
         """Get the details of a source by its name.
 
