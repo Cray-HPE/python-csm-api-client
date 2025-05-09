@@ -1,7 +1,7 @@
 #
 # MIT License
 #
-# (C) Copyright 2019-2024 Hewlett Packard Enterprise Development LP
+# (C) Copyright 2019-2025 Hewlett Packard Enterprise Development LP
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -26,6 +26,8 @@ Unit tests for csm_api_client.service.gateway
 """
 from unittest import mock
 import unittest
+import json
+from urllib.request import Request
 
 import requests
 
@@ -43,6 +45,7 @@ class TestAPIGatewayClient(unittest.TestCase):
     def setUp(self):
         self.api_gw_host = 'my-api-gw'
         self.mock_session = mock.MagicMock(autospec=Session, host=self.api_gw_host)
+        self.mock_request = mock.MagicMock(autospec=Request)
 
         # Create a test API client class that sets the base_resource_path
         class TSTClient(APIGatewayClient):
@@ -130,6 +133,8 @@ class TestAPIGatewayClient(unittest.TestCase):
 
     def test_post(self):
         """Test post method."""
+        self.mock_request.content = json.dumps({}).encode('utf-8')
+        self.mock_session.session.post.return_value = self.mock_request
         client = APIGatewayClient(self.mock_session, timeout=60)
         path_components = ['foo', 'bar', 'baz']
         payload = {}
@@ -152,6 +157,8 @@ class TestAPIGatewayClient(unittest.TestCase):
 
     def test_put(self):
         """Test put method."""
+        self.mock_request.content = json.dumps({}).encode('utf-8')
+        self.mock_session.session.put.return_value = self.mock_request
         client = APIGatewayClient(self.mock_session, timeout=60)
         path_components = ['foo', 'bar', 'baz']
         payload = {}
@@ -164,6 +171,8 @@ class TestAPIGatewayClient(unittest.TestCase):
 
     def test_put_with_params(self):
         """Test put method with additional params."""
+        self.mock_request.content = json.dumps({}).encode('utf-8')
+        self.mock_session.session.put.return_value = self.mock_request
         client = APIGatewayClient(self.mock_session, timeout=60)
         path_components = ['People']
         params = {'name': 'ryan'}
@@ -186,6 +195,8 @@ class TestAPIGatewayClient(unittest.TestCase):
 
     def test_patch(self):
         """Test patch method."""
+        self.mock_request.content = json.dumps({}).encode('utf-8')
+        self.mock_session.session.patch.return_value = self.mock_request
         client = APIGatewayClient(self.mock_session, timeout=60)
         path_components = ['foo', 'bar', 'baz']
         payload = {}
@@ -198,6 +209,8 @@ class TestAPIGatewayClient(unittest.TestCase):
 
     def test_patch_json(self):
         """Test patch method with json payload."""
+        self.mock_request.content = json.dumps({}).encode('utf-8')
+        self.mock_session.session.patch.return_value = self.mock_request
         client = APIGatewayClient(self.mock_session, timeout=60)
         path_components = ['foo', 'bar', 'baz']
         json_payload = {'field': 'value'}
