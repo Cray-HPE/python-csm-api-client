@@ -255,6 +255,8 @@ class APIGatewayClient:
 
         r = self._make_req(*args, req_type='POST', req_body=payload, json=json, **kwargs)
 
+        LOGGER.debug(f'debug_request {r}')
+
         return r
 
     def put(self, *args: str, payload: Optional[Dict] = None, json: Optional[Dict] = None, **kwargs: Any) -> Response:
