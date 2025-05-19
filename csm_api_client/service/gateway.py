@@ -1,7 +1,7 @@
 #
 # MIT License
 #
-# (C) Copyright 2019-2024 Hewlett Packard Enterprise Development LP
+# (C) Copyright 2019-2025 Hewlett Packard Enterprise Development LP
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -26,6 +26,7 @@ Client for querying the API gateway.
 """
 from functools import wraps
 import logging
+import json
 import requests
 from typing import (
     Any,
@@ -127,7 +128,7 @@ class APIGatewayClient:
         req_type: str = 'GET',
         req_param: Optional[Dict] = None,
         req_body: Optional[Dict] = None,
-        json: Dict = None,
+        req_json: Dict = None,
         raise_not_ok: bool = True,
     ) -> Response:
         """Perform HTTP request with type `req_type` to resource given in `args`.
@@ -137,7 +138,7 @@ class APIGatewayClient:
             req_type: Type of request (GET, STREAM, POST, PUT, or DELETE).
             req_param: request parameters
             req_body: request body
-            json: The data dict to encode as JSON and pass as the body of
+            req_json: The data dict to encode as JSON and pass as the body of
                 a POST, PUT, or PATCH request.
             raise_not_ok: If True and the response code is >=400, raise
                 an APIError. If False, return the response object.
@@ -169,11 +170,11 @@ class APIGatewayClient:
             elif req_type == 'STREAM':
                 r = requester.get(url, params=req_param, stream=True, timeout=self.timeout)
             elif req_type == 'POST':
-                r = requester.post(url, data=req_body, params=req_param, json=json, timeout=self.timeout)
+                r = requester.post(url, data=req_body, params=req_param, json=req_json, timeout=self.timeout)
             elif req_type == 'PUT':
-                r = requester.put(url, data=req_body, params=req_param, json=json, timeout=self.timeout)
+                r = requester.put(url, data=req_body, params=req_param, json=req_json, timeout=self.timeout)
             elif req_type == 'PATCH':
-                r = requester.patch(url, data=req_body, params=req_param, json=json, timeout=self.timeout)
+                r = requester.patch(url, data=req_body, params=req_param, json=req_json, timeout=self.timeout)
             elif req_type == 'DELETE':
                 r = requester.delete(url, timeout=self.timeout)
             else:
@@ -192,6 +193,10 @@ class APIGatewayClient:
 
         if raise_not_ok and not r.ok:
             self.raise_from_response(r)
+
+        debug_req_types = ['POST', 'PUT', 'PATCH']
+        if req_type in debug_req_types:
+            LOGGER.debug(f'Request body from {req_type} request: {json.dumps(json.loads(r.content.decode()))}')
 
         return r
 
@@ -253,7 +258,7 @@ class APIGatewayClient:
                 raises a RequestException of any kind.
         """
 
-        r = self._make_req(*args, req_type='POST', req_body=payload, json=json, **kwargs)
+        r = self._make_req(*args, req_type='POST', req_body=payload, req_json=json, **kwargs)
 
         return r
 
@@ -274,7 +279,7 @@ class APIGatewayClient:
                 raises a RequestException of any kind.
         """
 
-        r = self._make_req(*args, req_type='PUT', req_body=payload, json=json, **kwargs)
+        r = self._make_req(*args, req_type='PUT', req_body=payload, req_json=json, **kwargs)
 
         return r
 
@@ -295,7 +300,7 @@ class APIGatewayClient:
                 raises a RequestException of any kind.
         """
 
-        r = self._make_req(*args, req_type='PATCH', req_body=payload, json=json, **kwargs)
+        r = self._make_req(*args, req_type='PATCH', req_body=payload, req_json=json, **kwargs)
 
         return r
 
